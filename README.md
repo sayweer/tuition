@@ -147,6 +147,8 @@ The script signs with `~/.config/solana/tuition-devnet.json`. Set `SOLANA_KEYPAI
 
 Everything in this repository was written during the hackathon window (from 12 October 2026), with AI assistance. No code from earlier projects is reused.
 
+The web app's visual direction (paper documents on a surface, money travelling along threads, a story told in scroll scenes) is inspired by [Keyarc](https://github.com/Bekirerdem/keyarc) (MIT). We reworked the idea as a bursar's desk: navy leather, binder clips, airmail routes. The motion engine and all components were written for this project; no Keyarc code is included.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
