@@ -1,0 +1,32 @@
+
+# External Claude skill submodules (re-fetched via: git submodule update --init)
+.claude/skills/ext/
+
+# >>> solana-ai-kit config — gitignored by default; run /commit-claude-config to version it >>>
+.gitmodules
+.claude/
+CLAUDE.md
+.mcp.json
+.safe-ai-skill/
+# <<< solana-ai-kit config <<<
+
+# solana-ai-kit local-only (never committed)
+CLAUDE.local.md
+.claude/context/
+.env
+.env.local
+.memsearch/
+.claude/worktrees/
+
+# build output
+target/
+.anchor/
+test-ledger/
+node_modules/
+.next/
+*.tsbuildinfo
+.DS_Store
+
+# private planning notes (never publish)
+HANDOFF.md
+.pnpm-store/
