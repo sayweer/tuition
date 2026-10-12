@@ -166,9 +166,10 @@ export async function invoiceHistory(rpc: AnyRpc, invoice: Address): Promise<His
 
 // ---------------------------------------------------------- formatting
 
+/** Shows every significant decimal (at least two), so what is displayed is exactly what moves. */
 export function formatAmount(base: bigint, decimals = DECIMALS): string {
   const value = Number(base) / 10 ** decimals;
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: decimals });
 }
 
 export function formatTry(kurus: bigint): string {
@@ -178,7 +179,7 @@ export function formatTry(kurus: bigint): string {
 /** Parses a decimal string ("300", "300.5") into base units without float rounding. */
 export function parseAmount(input: string, decimals = DECIMALS): bigint | null {
   const m = /^(\d+)(?:\.(\d*))?$/.exec(input.trim());
-  if (!m) return null;
+  if (!m || (m[2] ?? "").length > decimals) return null;
   const frac = (m[2] ?? "").slice(0, decimals).padEnd(decimals, "0");
   return BigInt(m[1]) * 10n ** BigInt(decimals) + BigInt(frac || "0");
 }
@@ -202,9 +203,19 @@ export async function sha256(data: BufferSource): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", data));
 }
 
-/** Student reference is salted with the invoice address so the hash differs per invoice. */
-export function studentRefHash(invoice: Address, ref: string): Promise<Uint8Array> {
-  return sha256(new TextEncoder().encode(`${invoice}:${ref.trim().toUpperCase()}`));
+/** A fresh random salt per request. It travels only in the family's link (#k=…), never on-chain,
+ *  so a short student number cannot be brute-forced from the public hash. */
+export function newSalt(): Uint8Array {
+  return crypto.getRandomValues(new Uint8Array(16));
+}
+
+export function linkSalt(hash: string): Uint8Array | null {
+  const hex = /(?:^#|&)k=([0-9a-f]{32})(?:&|$)/i.exec(hash)?.[1];
+  return hex ? Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16)) : null;
+}
+
+export function studentRefHash(invoice: Address, ref: string, salt: Uint8Array): Promise<Uint8Array> {
+  return sha256(new TextEncoder().encode(`${invoice}:${ref.trim().toUpperCase()}:${toHex(salt)}`));
 }
 
 export function isExpired(inv: Invoice, nowSecs: number): boolean {
@@ -235,6 +246,8 @@ const PROGRAM_ERRORS: Record<number, string> = {
   6018: "Only the arbiter can do this.",
   6019: "Wrong currency for this request.",
   6020: "That account does not belong to the party in the ruling.",
+  6021: "Math overflow.",
+  6022: "Escrow balance does not match the expected payout.",
 };
 
 function findCustomCode(e: unknown, depth = 0): number | null {

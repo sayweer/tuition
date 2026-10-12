@@ -103,7 +103,12 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
     Resolved: invoice.status === Status.Resolved,
   };
   const terminal = TERMINAL[invoice.status];
-  const steps = terminal ? [...SEQUENCE.filter((s) => reached[s.step]), terminal] : SEQUENCE;
+  // Once settled, steps that never happened (e.g. confirmed before the partner reported) are dropped.
+  const steps = terminal
+    ? [...SEQUENCE.filter((s) => reached[s.step]), terminal]
+    : invoice.status === Status.Released
+      ? SEQUENCE.filter((s) => reached[s.step])
+      : SEQUENCE;
   return (
     <ol className="timeline">
       {steps.map((s, i) => {

@@ -54,7 +54,9 @@ export default function ReceiptPage() {
     .slice(0, 3)
     .toUpperCase();
   const symbol = mintSymbol(inv.mint);
-  const settled = inv.status >= Status.Released;
+  // Only a release (or a ruling for the partner) means the university was paid; a refund is not a receipt.
+  const paidToSchool = inv.status === Status.Released || (inv.status === Status.Resolved && inv.resolvedToOffice);
+  const returned = inv.status === Status.Refunded || (inv.status === Status.Resolved && !inv.resolvedToOffice);
   const unset = (a: string) => a === "11111111111111111111111111111111";
 
   return (
@@ -68,7 +70,7 @@ export default function ReceiptPage() {
           <div>
             <h1 className="rcpt-school">{name}</h1>
             <p className="label rcpt-kind">
-              Finance office · {settled ? "Tuition receipt" : "Tuition request in progress"}
+              Finance office · {paidToSchool ? "Tuition receipt" : returned ? "Refund record" : "Tuition request in progress"}
             </p>
           </div>
           <div className="rcpt-no">
@@ -84,7 +86,13 @@ export default function ReceiptPage() {
               {formatAmount(inv.deposited > 0n ? inv.deposited : inv.amount)}
               <small>{symbol}</small>
             </p>
-            <p className="rcpt-try">Paid to the university&apos;s bank as {formatTry(inv.amountTryKurus)}</p>
+            <p className="rcpt-try">
+              {paidToSchool
+                ? `Paid to the university's bank as ${formatTry(inv.amountTryKurus)}`
+                : returned
+                  ? `Returned to the family (lira quote was ${formatTry(inv.amountTryKurus)})`
+                  : `Lira quote ${formatTry(inv.amountTryKurus)}`}
+            </p>
             <div className="status-line">
               <StatusBadge status={inv.status} />
             </div>

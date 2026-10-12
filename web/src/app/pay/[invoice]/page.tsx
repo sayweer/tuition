@@ -16,13 +16,16 @@ import {
   formatTerm,
   formatTry,
   shortAddress,
+  linkSalt,
   studentRefHash,
   tokenBalance,
   tokenProgramOf,
   toHex,
   type Invoice,
 } from "@/lib/escrow";
-import { useApp, useConfig, useHistory, useInvoice, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, useHistory, useInvoice, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
+
+type Tx = ReturnType<typeof useSendTx>;
 
 export default function PayPage() {
   const params = useParams<{ invoice: string }>();
@@ -30,6 +33,10 @@ export default function PayPage() {
   const invoice = useInvoice(id);
   const school = usePayeeName(invoice.data?.payee);
   const history = useHistory(id, invoice.data?.status);
+  // Owned here, not by the action cards: they unmount when the status moves on, and the
+  // success notice with its transaction link has to stay on screen.
+  const lockTx = useSendTx();
+  const refundTx = useSendTx();
 
   if (!id) return <DeskNote problem>This payment link is not valid.</DeskNote>;
   if (invoice.isLoading) return <DeskNote>Loading the request…</DeskNote>;
@@ -64,15 +71,20 @@ export default function PayPage() {
               {formatTerm(inv.term)} tuition, paid to the university as {formatTry(inv.amountTryKurus)}
             </p>
             <div className="status-line">
-              <StatusBadge status={inv.status} /> <Countdown invoice={inv} />
+              <StatusBadge status={inv.status} />{" "}
+              {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
             </div>
           </div>
           <VerifyStudent invoice={id} expected={inv.studentRefHash} />
         </article>
 
         <div className="pay-side">
-          {inv.status === Status.Open && <LockFunds id={id} inv={inv} onDone={() => invoice.mutate()} />}
-          {inv.status === Status.Funded && <RefundIfExpired id={id} inv={inv} onDone={() => invoice.mutate()} />}
+          <Notice tx={lockTx} doneText="Locked in escrow." />
+          <Notice tx={refundTx} doneText="Refunded to the family." />
+          {inv.status === Status.Open && <LockFunds id={id} inv={inv} tx={lockTx} onDone={() => invoice.mutate()} />}
+          {inv.status === Status.Funded && (
+            <RefundIfExpired id={id} inv={inv} tx={refundTx} onDone={() => invoice.mutate()} />
+          )}
           <section className="paper sheet">
             <i className="clip" aria-hidden />
             <p className="label">Where the money is</p>
@@ -90,9 +102,22 @@ export default function PayPage() {
   );
 }
 
+function Notice({ tx, doneText }: { tx: TxState; doneText: string }) {
+  if (tx.status === "idle") return null;
+  return <TxNotice tx={tx} doneText={doneText} />;
+}
+
 function VerifyStudent({ invoice, expected }: { invoice: Address; expected: ArrayLike<number> }) {
   const [ref, setRef] = useState("");
-  const [result, setResult] = useState<boolean | null>(null);
+  const [result, setResult] = useState<boolean | "no-key" | null>(null);
+
+  async function check() {
+    // the salt travels only in the link's #fragment, which never reaches a server or the chain
+    const salt = linkSalt(window.location.hash);
+    if (!salt) return setResult("no-key");
+    setResult(toHex(await studentRefHash(invoice, ref, salt)) === toHex(expected));
+  }
+
   return (
     <details className="verify">
       <summary>Check this request is for your student</summary>
@@ -109,7 +134,7 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
         <button
           className="btn paperbtn"
           disabled={!ref.trim()}
-          onClick={async () => setResult(toHex(await studentRefHash(invoice, ref)) === toHex(expected))}
+          onClick={check}
         >
           Check
         </button>
@@ -118,15 +143,17 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
       {result === false && (
         <p className="notice notice-error">It does not match. Ask the university before you pay.</p>
       )}
+      {result === "no-key" && (
+        <p className="notice notice-error">Open the exact link the university sent you; it carries the key for this check.</p>
+      )}
     </details>
   );
 }
 
-function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () => void }) {
+function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx; onDone: () => void }) {
   const client = useApp();
   const me = useWalletAddress();
   const config = useConfig();
-  const tx = useSendTx();
   const offices = config.data?.offices ?? [];
   const [office, setOffice] = useState<Address | "">("");
   const chosen = office || offices[0] || "";
@@ -137,17 +164,19 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
   const short = balance.data !== undefined && balance.data < inv.amount;
 
   async function lock() {
-    const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-    const sig = await tx.send(async () => [
-      await getPayInvoiceInstructionAsync({
-        payer: client.payer,
-        office: chosen as Address,
-        invoice: id,
-        payerToken: await ataOf(me as Address, inv.mint, tokenProgram),
-        mint: inv.mint,
-        tokenProgram,
-      }),
-    ]);
+    const sig = await tx.send(async () => {
+      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
+      return [
+        await getPayInvoiceInstructionAsync({
+          payer: client.payer,
+          office: chosen as Address,
+          invoice: id,
+          payerToken: await ataOf(me as Address, inv.mint, tokenProgram),
+          mint: inv.mint,
+          tokenProgram,
+        }),
+      ];
+    });
     if (sig) onDone();
   }
 
@@ -201,37 +230,37 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
               {tx.status === "pending" ? "Locking…" : `Lock ${formatAmount(inv.amount)} ${symbol}`}
             </button>
           </div>
-          <TxNotice tx={tx} doneText="Locked in escrow." />
         </>
       )}
     </section>
   );
 }
 
-function RefundIfExpired({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () => void }) {
+function RefundIfExpired({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx; onDone: () => void }) {
   const client = useApp();
   const me = useWalletAddress();
   const expired = useIsExpired(inv);
-  const tx = useSendTx();
   if (!expired) return null;
 
   async function refund() {
-    const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-    const sig = await tx.send(async () => [
-      await getCreateAssociatedTokenIdempotentInstructionAsync({
-        payer: client.payer,
-        owner: inv.payer,
-        mint: inv.mint,
-        tokenProgram,
-      }),
-      await getRefundInstructionAsync({
-        caller: client.payer,
-        invoice: id,
-        payerToken: await ataOf(inv.payer, inv.mint, tokenProgram),
-        mint: inv.mint,
-        tokenProgram,
-      }),
-    ]);
+    const sig = await tx.send(async () => {
+      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
+      return [
+        await getCreateAssociatedTokenIdempotentInstructionAsync({
+          payer: client.payer,
+          owner: inv.payer,
+          mint: inv.mint,
+          tokenProgram,
+        }),
+        await getRefundInstructionAsync({
+          caller: client.payer,
+          invoice: id,
+          payerToken: await ataOf(inv.payer, inv.mint, tokenProgram),
+          mint: inv.mint,
+          tokenProgram,
+        }),
+      ];
+    });
     if (sig) onDone();
   }
 
@@ -252,7 +281,6 @@ function RefundIfExpired({ id, inv, onDone }: { id: Address; inv: Invoice; onDon
       ) : (
         <ConnectPrompt>Connect any wallet to send the refund.</ConnectPrompt>
       )}
-      <TxNotice tx={tx} doneText="Refunded to the family." />
     </section>
   );
 }

@@ -22,11 +22,25 @@ import {
   listInvoices,
   parseAmount,
   shortAddress,
+  newSalt,
   studentRefHash,
+  toHex,
   tokenProgramOf,
   type InvoiceRow,
 } from "@/lib/escrow";
 import { useApp, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+
+// The student-number salt lives only in the family's link and in this browser, never on-chain.
+const saltKey = (invoice: Address) => `tuition-salt:${invoice}`;
+function payLink(invoice: Address): string {
+  let salt: string | null = null;
+  try {
+    salt = localStorage.getItem(saltKey(invoice));
+  } catch {
+    // storage blocked: the link still works, only the student check needs the key
+  }
+  return `/pay/${invoice}${salt ? `#k=${salt}` : ""}`;
+}
 
 const TERMS = [20261, 20272, 20273];
 
@@ -105,7 +119,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   const [studentRef, setStudentRef] = useState("");
   const [mint, setMint] = useState<Address>(MINTS[0].address);
   const [windowSecs, setWindowSecs] = useState(PAYMENT_WINDOWS[0].secs);
-  const [created, setCreated] = useState<Address | null>(null);
+  const [created, setCreated] = useState<{ invoice: Address; salt: string } | null>(null);
 
   const amountBase = parseAmount(amount);
   const tryKurus = parseAmount(tryAmount, 2);
@@ -114,6 +128,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   async function submit() {
     const nonce = BigInt(Date.now());
     const [invoice] = await findInvoicePda({ payee: me, nonce });
+    const salt = newSalt();
     const sig = await tx.send(async () => [
       await getCreateInvoiceInstructionAsync({
         payee: client.payer,
@@ -123,12 +138,17 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
         amount: amountBase as bigint,
         amountTryKurus: tryKurus as bigint,
         term,
-        studentRefHash: await studentRefHash(invoice, studentRef),
+        studentRefHash: await studentRefHash(invoice, studentRef, salt),
         windowSecs: BigInt(windowSecs),
       }),
     ]);
     if (sig) {
-      setCreated(invoice);
+      try {
+        localStorage.setItem(saltKey(invoice), toHex(salt));
+      } catch {
+        // storage blocked: the link shown below still carries the salt
+      }
+      setCreated({ invoice, salt: toHex(salt) });
       setStudentRef("");
       onCreated();
     }
@@ -183,13 +203,14 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
         </button>
       </div>
       <TxNotice tx={tx} doneText="Request issued." />
-      {created && <ShareLink invoice={created} />}
+      {created && <ShareLink invoice={created.invoice} salt={created.salt} />}
     </section>
   );
 }
 
-function ShareLink({ invoice }: { invoice: Address }) {
-  const url = `${window.location.origin}/pay/${invoice}`;
+function ShareLink({ invoice, salt }: { invoice: Address; salt: string }) {
+  const path = `/pay/${invoice}#k=${salt}`;
+  const url = `${window.location.origin}${path}`;
   const [copied, setCopied] = useState(false);
   return (
     <div className="share">
@@ -209,7 +230,7 @@ function ShareLink({ invoice }: { invoice: Address }) {
           >
             {copied ? "Copied" : "Copy link"}
           </button>
-          <Link className="btn ghost" href={`/pay/${invoice}`}>
+          <Link className="btn ghost" href={path}>
             Open payment page <span className="arr" aria-hidden>→</span>
           </Link>
         </div>
@@ -225,22 +246,24 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
   const canConfirm = inv.status === Status.Funded || inv.status === Status.Paid;
 
   async function confirm() {
-    const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-    const sig = await tx.send(async () => [
-      await getCreateAssociatedTokenIdempotentInstructionAsync({
-        payer: client.payer,
-        owner: inv.office,
-        mint: inv.mint,
-        tokenProgram,
-      }),
-      await getAcknowledgeInstructionAsync({
-        payee: client.payer,
-        invoice: row.address,
-        officeToken: await ataOf(inv.office, inv.mint, tokenProgram),
-        mint: inv.mint,
-        tokenProgram,
-      }),
-    ]);
+    const sig = await tx.send(async () => {
+      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
+      return [
+        await getCreateAssociatedTokenIdempotentInstructionAsync({
+          payer: client.payer,
+          owner: inv.office,
+          mint: inv.mint,
+          tokenProgram,
+        }),
+        await getAcknowledgeInstructionAsync({
+          payee: client.payer,
+          invoice: row.address,
+          officeToken: await ataOf(inv.office, inv.mint, tokenProgram),
+          mint: inv.mint,
+          tokenProgram,
+        }),
+      ];
+    });
     if (sig) onChange();
   }
 
@@ -268,7 +291,7 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
             {tx.status === "pending" ? "Confirming…" : "Confirm lira received"}
           </button>
         )}
-        <Link className="btn ghost" href={inv.status === Status.Open ? `/pay/${row.address}` : `/receipt/${row.address}`}>
+        <Link className="btn ghost" href={inv.status === Status.Open ? payLink(row.address) : `/receipt/${row.address}`}>
           {inv.status === Status.Open ? "Payment page" : "Receipt"} <span className="arr" aria-hidden>→</span>
         </Link>
       </div>

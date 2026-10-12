@@ -65,18 +65,22 @@ export default function OfficePage() {
 function Queue({ me }: { me: Address }) {
   const { rpc } = useApp();
   const rows = useSWR(["office-invoices", me], () => listInvoices(rpc, { office: me }), { refreshInterval: 5000 });
+  // Owned by the queue: a reported slip leaves "To pay", and its notice must outlive it.
+  const tx = useSendTx();
   if (rows.isLoading) return <p className="desk-muted">Loading requests…</p>;
   const all = rows.data ?? [];
   const todo = all.filter((r) => r.data.status === Status.Funded);
   const rest = all.filter((r) => r.data.status !== Status.Funded);
   return (
+    <>
+    {tx.status !== "idle" && <TxNotice tx={tx} doneText="Reported. Waiting for the university to confirm." />}
     <div className={rest.length > 0 ? "queue two" : "queue"}>
       <section className="col">
         <h2 className="tag">To pay</h2>
         {todo.length ? (
           <div className="slips">
             {todo.map((r) => (
-              <PayRow key={r.address} row={r} onChange={() => rows.mutate()} />
+              <PayRow key={r.address} row={r} tx={tx} onChange={() => rows.mutate()} />
             ))}
           </div>
         ) : (
@@ -94,15 +98,15 @@ function Queue({ me }: { me: Address }) {
         </section>
       )}
     </div>
+    </>
   );
 }
 
-function PayRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }) {
+function PayRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typeof useSendTx>; onChange: () => void }) {
   const client = useApp();
   const inv = row.data;
   const school = usePayeeName(inv.payee);
   const expired = useIsExpired(inv);
-  const tx = useSendTx();
   const [receipt, setReceipt] = useState<{ name: string; hash: Uint8Array } | null>(null);
 
   async function report() {
@@ -147,7 +151,6 @@ function PayRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }) {
           {tx.status === "pending" ? "Reporting…" : "Report lira sent"}
         </button>
       </div>
-      {tx.status !== "idle" && <TxNotice tx={tx} doneText="Reported. Waiting for the university to confirm." />}
     </article>
   );
 }

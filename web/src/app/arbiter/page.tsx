@@ -55,45 +55,58 @@ export default function ArbiterPage() {
 function Disputes() {
   const { rpc } = useApp();
   const rows = useSWR("disputes", () => listInvoices(rpc, { status: Status.Paid }), { refreshInterval: 5000 });
+  // Owned by the list: a ruled dispute disappears, and its notice must outlive it.
+  const tx = useSendTx();
   if (rows.isLoading) return <p className="desk-muted">Loading disputes…</p>;
-  if (!rows.data?.length) return <p className="desk-muted">No open disputes.</p>;
+  const notice = tx.status !== "idle" && <TxNotice tx={tx} doneText="Ruling recorded." />;
+  if (!rows.data?.length)
+    return (
+      <>
+        {notice}
+        <p className="desk-muted">No open disputes.</p>
+      </>
+    );
   return (
-    <div className="slips grid">
-      {rows.data.map((r) => (
-        <DisputeRow key={r.address} row={r} onChange={() => rows.mutate()} />
-      ))}
-    </div>
+    <>
+      {notice}
+      <div className="slips grid">
+        {rows.data.map((r) => (
+          <DisputeRow key={r.address} row={r} tx={tx} onChange={() => rows.mutate()} />
+        ))}
+      </div>
+    </>
   );
 }
 
-function DisputeRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }) {
+function DisputeRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typeof useSendTx>; onChange: () => void }) {
   const client = useApp();
   const now = useNow();
   const inv = row.data;
   const school = usePayeeName(inv.payee);
-  const tx = useSendTx();
   const opensAt = Math.max(Number(inv.deadline), Number(inv.paidAt) + REVIEW_SECS);
   const ready = now >= opensAt;
 
   async function rule(toOffice: boolean) {
     const owner = toOffice ? inv.office : inv.payer;
-    const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-    const sig = await tx.send(async () => [
-      await getCreateAssociatedTokenIdempotentInstructionAsync({
-        payer: client.payer,
-        owner,
-        mint: inv.mint,
-        tokenProgram,
-      }),
-      await getResolveInstructionAsync({
-        arbiter: client.payer,
-        invoice: row.address,
-        destination: await ataOf(owner, inv.mint, tokenProgram),
-        mint: inv.mint,
-        tokenProgram,
-        toOffice,
-      }),
-    ]);
+    const sig = await tx.send(async () => {
+      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
+      return [
+        await getCreateAssociatedTokenIdempotentInstructionAsync({
+          payer: client.payer,
+          owner,
+          mint: inv.mint,
+          tokenProgram,
+        }),
+        await getResolveInstructionAsync({
+          arbiter: client.payer,
+          invoice: row.address,
+          destination: await ataOf(owner, inv.mint, tokenProgram),
+          mint: inv.mint,
+          tokenProgram,
+          toOffice,
+        }),
+      ];
+    });
     if (sig) onChange();
   }
 
@@ -135,7 +148,6 @@ function DisputeRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
           Return to family
         </button>
       </div>
-      {tx.status !== "idle" && <TxNotice tx={tx} doneText="Ruling recorded." />}
     </article>
   );
 }

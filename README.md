@@ -128,7 +128,7 @@ The script signs with `~/.config/solana/tuition-devnet.json`. Set `SOLANA_KEYPAI
 
 - **No lira moves on-chain.** The chain cannot prove that the partner paid. The proof is the university's own signature.
 - **Partners must be licensed.** In production the payout partner has to be a licensed payment institution (Law 6493) and carries KYC. Crypto is not used to pay for services in Türkiye: the university receives lira from its bank (CBRT 2021 rule).
-- **No personal data on-chain.** There are no names, IBANs or student numbers. The student reference is `sha256(invoice_address:STUDENT_NUMBER)` so families can check it. Short student numbers can be brute-forced; production would use a key held by the university (HMAC).
+- **No personal data on-chain.** There are no names, IBANs or student numbers. The student reference is `sha256(invoice_address:STUDENT_NUMBER:salt)`. The salt is random per request and travels only in the family's link (`#k=…`, a URL fragment that never reaches a server). Nobody can brute-force the student number from the public hash, while a family holding the link can still check it.
 
 ## Known limits and risks
 
