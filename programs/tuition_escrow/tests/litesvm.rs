@@ -22,7 +22,9 @@ use spl_token_2022_interface::{
     state::Mint as MintState,
 };
 
-use tuition_escrow::{accounts, instruction, Config, Invoice, Status, ID as PROGRAM_ID};
+use tuition_escrow::{
+    accounts, instruction, Config, Invoice, Status, ID as PROGRAM_ID, MIN_WINDOW_SECS,
+};
 
 const TOKEN: Pubkey = anchor_spl::token::ID;
 const TOKEN_2022: Pubkey = anchor_spl::token_2022::ID;
@@ -43,6 +45,8 @@ enum MintKind {
     T22,
     T22Fee(u16),
     T22Hook(Option<Pubkey>),
+    /// Token-2022 with a permanent delegate (the admin), like USDG's issuer clawback.
+    T22Delegate,
 }
 
 #[derive(Clone, Copy)]
@@ -181,6 +185,7 @@ fn create_mint(svm: &mut LiteSVM, admin: &Keypair, kind: MintKind) -> (Pubkey, P
         MintKind::T22 => (TOKEN_2022, vec![]),
         MintKind::T22Fee(_) => (TOKEN_2022, vec![ExtensionType::TransferFeeConfig]),
         MintKind::T22Hook(_) => (TOKEN_2022, vec![ExtensionType::TransferHook]),
+        MintKind::T22Delegate => (TOKEN_2022, vec![ExtensionType::PermanentDelegate]),
     };
     let space = ExtensionType::try_calculate_account_len::<MintState>(&exts).unwrap();
     let rent = svm.minimum_balance_for_rent_exemption(space);
@@ -206,6 +211,9 @@ fn create_mint(svm: &mut LiteSVM, admin: &Keypair, kind: MintKind) -> (Pubkey, P
         MintKind::T22Hook(hook) => ixs.push(
             transfer_hook::instruction::initialize(&prog, &kp.pubkey(), Some(admin.pubkey()), hook)
                 .unwrap(),
+        ),
+        MintKind::T22Delegate => ixs.push(
+            tokix::initialize_permanent_delegate(&prog, &kp.pubkey(), &admin.pubkey()).unwrap(),
         ),
         _ => {}
     }
@@ -932,5 +940,43 @@ fn vault_donation_cannot_brick_or_inflate_a_payout() {
     do_ack(&mut e).unwrap();
     assert_eq!(balance(&e.svm, &e.vault), 1); // dust stays, payout exact
     assert_eq!(balance(&e.svm, &e.office_ta), AMOUNT);
+    assert_eq!(total(&e), TOTAL_AT_START);
+}
+
+#[test]
+fn university_gets_a_review_window_after_a_last_second_mark_paid() {
+    let mut e = funded(MintKind::Classic);
+    advance(&mut e.svm, WINDOW - 1);
+    do_mark_paid(&mut e).unwrap(); // one second before the deadline
+    advance(&mut e.svm, 1);
+    assert_err(do_resolve(&mut e, true), "NotExpired"); // deadline reached, review still open
+    assert_err(do_refund(&mut e), "PaidAwaitsArbiter");
+    advance(&mut e.svm, MIN_WINDOW_SECS - 2);
+    assert_err(do_resolve(&mut e, true), "NotExpired");
+    advance(&mut e.svm, 1); // == paid_at + MIN_WINDOW_SECS
+    do_resolve(&mut e, true).unwrap();
+    assert_eq!(balance(&e.svm, &e.office_ta), AMOUNT);
+}
+
+#[test]
+fn issuer_clawback_does_not_lock_the_rest_of_the_vault() {
+    let mut e = funded(MintKind::T22Delegate);
+    // the permanent delegate (admin) pulls one base unit out of the vault
+    let ix = tokix::transfer_checked(
+        &e.prog,
+        &e.vault,
+        &e.mint,
+        &e.stranger_ta,
+        &e.admin.pubkey(),
+        &[],
+        1,
+        DECIMALS,
+    )
+    .unwrap();
+    run(&mut e, ix, Who::Admin).unwrap();
+    do_ack(&mut e).unwrap();
+    assert_eq!(invoice_state(&e).status, Status::Released);
+    assert_eq!(balance(&e.svm, &e.vault), 0);
+    assert_eq!(balance(&e.svm, &e.office_ta), AMOUNT - 1);
     assert_eq!(total(&e), TOTAL_AT_START);
 }

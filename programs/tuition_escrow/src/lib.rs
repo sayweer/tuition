@@ -274,11 +274,17 @@ pub mod tuition_escrow {
     }
 
     /// Dispute: the office claims it paid, the university has not signed, time is up.
+    /// The university always gets at least MIN_WINDOW_SECS after `mark_paid` to respond.
     pub fn resolve(ctx: Context<Resolve>, to_office: bool) -> Result<()> {
         let inv = &ctx.accounts.invoice;
         require!(inv.status == Status::Paid, EscrowError::InvalidStatus);
+        let now = Clock::get()?.unix_timestamp;
+        let review_ends = inv
+            .paid_at
+            .checked_add(MIN_WINDOW_SECS)
+            .ok_or(EscrowError::MathOverflow)?;
         require!(
-            Clock::get()?.unix_timestamp >= inv.deadline,
+            now >= inv.deadline && now >= review_ends,
             EscrowError::NotExpired
         );
         let expected_owner = if to_office { inv.office } else { inv.payer };
@@ -357,7 +363,8 @@ fn ensure_no_transfer_hook(mint: &AccountInfo) -> Result<()> {
     Ok(())
 }
 
-/// Moves exactly the booked deposit out of the vault and finalises the invoice.
+/// Moves the booked deposit out of the vault and finalises the invoice. If the issuer's
+/// permanent delegate clawed part of it back, pays what is left instead of locking forever.
 fn release_vault<'info>(
     invoice: &mut Account<'info, Invoice>,
     vault: &mut InterfaceAccount<'info, TokenAccount>,
@@ -366,7 +373,7 @@ fn release_vault<'info>(
     token_program: &Interface<'info, TokenInterface>,
     final_status: Status,
 ) -> Result<u64> {
-    let amount = invoice.deposited;
+    let amount = invoice.deposited.min(vault.amount);
     invoice.status = final_status; // effects before interactions
     invoice.settled_at = Clock::get()?.unix_timestamp;
 

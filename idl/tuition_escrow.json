@@ -661,7 +661,8 @@
     {
       "name": "resolve",
       "docs": [
-        "Dispute: the office claims it paid, the university has not signed, time is up."
+        "Dispute: the office claims it paid, the university has not signed, time is up.",
+        "The university always gets at least MIN_WINDOW_SECS after `mark_paid` to respond."
       ],
       "discriminator": [
         246,
