@@ -11,14 +11,15 @@ import {
 } from "@solana/kit";
 import { findAssociatedTokenPda, fetchMaybeToken } from "@solana-program/token-2022";
 import {
-  fetchMaybeConfig,
-  fetchMaybeInvoice,
-  fetchMaybePayee,
+  CONFIG_DISCRIMINATOR,
   findConfigPda,
   findPayeePda,
+  getConfigDecoder,
   getInvoiceDecoder,
   getInvoiceSize,
+  getPayeeDecoder,
   INVOICE_DISCRIMINATOR,
+  PAYEE_DISCRIMINATOR,
   Status,
   TUITION_ESCROW_PROGRAM_ADDRESS,
   type Invoice,
@@ -33,21 +34,32 @@ export type InvoiceRow = { address: Address; data: Invoice };
 
 // --------------------------------------------------------------- reads
 
+/** Raw data of an account only if this program owns it and it carries the expected discriminator.
+ *  Anyone can create a look-alike account under another program and link to it, so nothing
+ *  is decoded or shown without this check. */
+async function ownedData(rpc: AnyRpc, addr: Address, discriminator: ArrayLike<number>): Promise<Uint8Array | null> {
+  const acc = await fetchEncodedAccount(rpc, addr);
+  if (!acc.exists || acc.programAddress !== TUITION_ESCROW_PROGRAM_ADDRESS) return null;
+  const data = new Uint8Array(acc.data);
+  for (let i = 0; i < discriminator.length; i++) if (data[i] !== discriminator[i]) return null;
+  return data;
+}
+
 export async function fetchConfig(rpc: AnyRpc) {
   const [pda] = await findConfigPda();
-  const acc = await fetchMaybeConfig(rpc, pda);
-  return acc.exists ? acc.data : null;
+  const data = await ownedData(rpc, pda, CONFIG_DISCRIMINATOR);
+  return data ? getConfigDecoder().decode(data) : null;
 }
 
 export async function fetchPayeeName(rpc: AnyRpc, authority: Address): Promise<string | null> {
   const [pda] = await findPayeePda({ authority });
-  const acc = await fetchMaybePayee(rpc, pda);
-  return acc.exists ? acc.data.name : null;
+  const data = await ownedData(rpc, pda, PAYEE_DISCRIMINATOR);
+  return data ? getPayeeDecoder().decode(data).name : null;
 }
 
 export async function fetchInvoice(rpc: AnyRpc, invoice: Address): Promise<Invoice | null> {
-  const acc = await fetchMaybeInvoice(rpc, invoice);
-  return acc.exists ? acc.data : null;
+  const data = await ownedData(rpc, invoice, INVOICE_DISCRIMINATOR);
+  return data && data.length === getInvoiceSize() ? getInvoiceDecoder().decode(data) : null;
 }
 
 /** The token program that owns a mint (classic SPL or Token-2022). */
@@ -121,8 +133,21 @@ const STEP_BY_IX: Record<string, Step> = {
 export type HistoryEntry = { step: Step; signature: Signature; blockTime: number | null };
 
 /** Every program call that touched this invoice, oldest first, read straight from the chain. */
+// Anchor logs the instruction name right after the runtime logs this program's invocation; a
+// line anywhere else could come from any program that merely mentions the invoice account.
+const INVOKE = `Program ${TUITION_ESCROW_PROGRAM_ADDRESS} invoke [`;
+
+function escrowInstruction(logs: readonly string[]): string | undefined {
+  for (let k = 1; k < logs.length; k++) {
+    if (!logs[k - 1].startsWith(INVOKE)) continue;
+    const name = /^Program log: Instruction: (\w+)$/.exec(logs[k])?.[1];
+    if (name && STEP_BY_IX[name]) return name;
+  }
+  return undefined;
+}
+
 export async function invoiceHistory(rpc: AnyRpc, invoice: Address): Promise<HistoryEntry[]> {
-  const sigs = await rpc.getSignaturesForAddress(invoice, { limit: 20 }).send();
+  const sigs = await rpc.getSignaturesForAddress(invoice, { limit: 40 }).send();
   const entries = await Promise.all(
     sigs
       .filter((s) => s.err === null)
@@ -130,10 +155,7 @@ export async function invoiceHistory(rpc: AnyRpc, invoice: Address): Promise<His
         const tx = await rpc
           .getTransaction(s.signature, { maxSupportedTransactionVersion: 0, encoding: "json" })
           .send();
-        const logs = tx?.meta?.logMessages ?? [];
-        const ix = logs
-          .map((l) => /^Program log: Instruction: (\w+)$/.exec(l)?.[1])
-          .find((name) => name && STEP_BY_IX[name]);
+        const ix = escrowInstruction(tx?.meta?.logMessages ?? []);
         return ix
           ? { step: STEP_BY_IX[ix], signature: s.signature, blockTime: s.blockTime === null ? null : Number(s.blockTime) }
           : null;

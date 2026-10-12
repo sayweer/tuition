@@ -93,16 +93,24 @@ const TERMINAL: Partial<Record<Status, { step: HistoryEntry["step"]; text: strin
 };
 
 export function Timeline({ invoice, history }: { invoice: Invoice; history: HistoryEntry[] | undefined }) {
+  // A step counts as done only when the invoice account itself says so; history only adds the link.
+  const reached: Record<HistoryEntry["step"], boolean> = {
+    Created: true,
+    Locked: invoice.fundedAt > 0n,
+    "TRY sent": invoice.paidAt > 0n,
+    Signed: invoice.status === Status.Released,
+    Refunded: invoice.status === Status.Refunded,
+    Resolved: invoice.status === Status.Resolved,
+  };
   const terminal = TERMINAL[invoice.status];
-  const steps = terminal
-    ? [...SEQUENCE.filter((s) => history?.some((h) => h.step === s.step) || s.step === "Created"), terminal]
-    : SEQUENCE;
+  const steps = terminal ? [...SEQUENCE.filter((s) => reached[s.step]), terminal] : SEQUENCE;
   return (
     <ol className="timeline">
       {steps.map((s, i) => {
-        const entry = history?.find((h) => h.step === s.step);
+        const done = reached[s.step];
+        const entry = done ? history?.find((h) => h.step === s.step) : undefined;
         return (
-          <li key={s.step} className={entry ? "done" : "todo"}>
+          <li key={s.step} className={done ? "done" : "todo"}>
             <span className="timeline-index" aria-hidden>
               {i + 1}
             </span>
@@ -116,7 +124,7 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
                   </a>
                 </p>
               ) : (
-                <p className="timeline-meta">Not yet</p>
+                <p className="timeline-meta">{done ? "Confirmed on-chain" : "Not yet"}</p>
               )}
             </div>
           </li>
