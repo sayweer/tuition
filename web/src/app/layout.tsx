@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SiteHeader } from "@/components/site-header";
+import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { APP_NAME } from "@/lib/constants";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -32,10 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Providers>
           <SiteHeader />
           {children}
-          <footer className="site-foot">
-            <span>Solana devnet · test tokens only · no real lira moves on-chain</span>
-            <span>{APP_NAME}</span>
-          </footer>
+          <SiteFooter />
         </Providers>
       </body>
     </html>

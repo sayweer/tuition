@@ -170,14 +170,16 @@ export function initLanding(root: HTMLElement): () => void {
     new Route(S.hero, q("#hPartner"), q("#hBursar"), { bend: -0.12, color: "rgba(120,160,240,.95)" }),
     new Route(S.hero, q("#hBursar"), q("#hStudent"), { bend: 0.2 }),
   ];
-  const heroCoin = new Coin(S.hero, hero[0], "300 USDG");
+  const usdg = root.dataset.coinUsdg ?? "300 USDG";
+  const lira = root.dataset.coinLira ?? "₺12,000";
+  const heroCoin = new Coin(S.hero, hero[0], usdg);
 
   const sInv = new Route(S.so, q("#sInvoice"), q("#sEscrow"), { bend: 0.18 });
   const sLira = new Route(S.so, q("#sSlip"), q("#sBursar"), { bend: -0.16, color: "rgba(120,160,240,.95)" });
   const sOut = new Route(S.so, q("#sEscrow"), q("#sPayout"), { bend: 0.08 });
-  const cLock = new Coin(S.so, sInv, "300 USDG");
-  const cLira = new Coin(S.so, sLira, "₺12,000", "blue");
-  const cOut = new Coin(S.so, sOut, "300 USDG");
+  const cLock = new Coin(S.so, sInv, usdg);
+  const cLira = new Coin(S.so, sLira, lira, "blue");
+  const cOut = new Coin(S.so, sOut, usdg);
 
   const rHold = new Route(S.rules, q("#rPartner"), q("#rArbiter"), { bend: 0.12 });
 
@@ -294,7 +296,7 @@ export function initLanding(root: HTMLElement): () => void {
       const t = l.dataset.text ?? "";
       const k = clamp(left, 0, t.length);
       left -= t.length;
-      const shown = t.slice(0, k).replace(/(locked|posted|released)/g, "<b>$1</b>");
+      const shown = t.slice(0, k).replace(/(locked|posted|released|kilitlendi|işlendi|aktarıldı)/g, "<b>$1</b>");
       l.innerHTML = shown + (k > 0 && k < t.length ? '<span class="caret"></span>' : "");
     });
   };

@@ -24,8 +24,148 @@ import {
   type Invoice,
 } from "@/lib/escrow";
 import { useApp, useConfig, useHistory, useInvoice, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
+import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Tx = ReturnType<typeof useSendTx>;
+
+type Copy = Record<
+  | "invalid"
+  | "loading"
+  | "notFound"
+  | "tuitionRequest"
+  | "byAirmail"
+  | "from"
+  | "someUniversity"
+  | "to"
+  | "toFamily"
+  | "locked"
+  | "refunded"
+  | "whereMoney"
+  | "progress"
+  | "openReceipt"
+  | "verify"
+  | "studentNumber"
+  | "check"
+  | "match"
+  | "noMatch"
+  | "noKey"
+  | "yourPart"
+  | "lockTitle"
+  | "lockText"
+  | "connectPay"
+  | "partner"
+  | "partnerHint"
+  | "balance"
+  | "usdgPre"
+  | "usdgPost"
+  | "askAdmin"
+  | "locking"
+  | "deadlinePassed"
+  | "refundTitle"
+  | "refundText"
+  | "refunding"
+  | "refund"
+  | "connectRefund",
+  string
+> & {
+  letterSub: (term: string, lira: string) => string;
+  partnerOption: (n: number, addr: string) => string;
+  notEnough: (symbol: string) => string;
+  lock: (amount: string, symbol: string) => string;
+};
+
+const T: Dict<Copy> = {
+  en: {
+    invalid: "This payment link is not valid.",
+    loading: "Loading the request…",
+    notFound: "No tuition request exists at this link on devnet.",
+    tuitionRequest: "Tuition request",
+    byAirmail: "By airmail",
+    from: "From",
+    someUniversity: "A registered university",
+    to: "To",
+    toFamily: "the student's family",
+    letterSub: (term, lira) => `${term} tuition, paid to the university as ${lira}`,
+    locked: "Locked in escrow.",
+    refunded: "Refunded to the family.",
+    whereMoney: "Where the money is",
+    progress: "Progress",
+    openReceipt: "Open the receipt",
+    verify: "Check this request is for your student",
+    studentNumber: "Student number",
+    check: "Check",
+    match: "It matches. This request was issued for this student.",
+    noMatch: "It does not match. Ask the university before you pay.",
+    noKey: "Open the exact link the university sent you; it carries the key for this check.",
+    yourPart: "Your part",
+    lockTitle: "Lock the tuition",
+    lockText:
+      "The money goes into escrow, not to anyone. It is released to the payout partner only after the university confirms the lira arrived. If that has not happened by the deadline, it comes back to you.",
+    connectPay: "Connect your wallet to pay.",
+    partner: "Payout partner",
+    partnerHint: "A licensed company that pays the university in lira.",
+    partnerOption: (n, addr) => `Licensed partner ${n} (${addr})`,
+    balance: "Your balance",
+    notEnough: (symbol) => `Not enough ${symbol}.`,
+    usdgPre: "Get test USDG at",
+    usdgPost: ".",
+    askAdmin: "Ask the demo admin for test dollars.",
+    locking: "Locking…",
+    lock: (amount, symbol) => `Lock ${amount} ${symbol}`,
+    deadlinePassed: "Deadline passed",
+    refundTitle: "The deadline passed with no payout",
+    refundText:
+      "The payout partner never reported sending lira. Anyone can return the full amount to the family wallet.",
+    refunding: "Refunding…",
+    refund: "Refund to the family",
+    connectRefund: "Connect any wallet to send the refund.",
+  },
+  tr: {
+    invalid: "Bu ödeme bağlantısı geçerli değil.",
+    loading: "Talep yükleniyor…",
+    notFound: "Devnet'te bu bağlantıya ait bir harç talebi yok.",
+    tuitionRequest: "Harç talebi",
+    byAirmail: "Uçak ile",
+    from: "Gönderen",
+    someUniversity: "Kayıtlı bir üniversite",
+    to: "Alıcı",
+    toFamily: "öğrencinin ailesi",
+    letterSub: (term, lira) => `${term} dönemi harcı; üniversiteye ${lira} olarak ödenir`,
+    locked: "Emanet hesabına kilitlendi.",
+    refunded: "Aileye iade edildi.",
+    whereMoney: "Para nerede",
+    progress: "Süreç",
+    openReceipt: "Makbuzu aç",
+    verify: "Bu talebin öğrenciniz için olduğunu kontrol edin",
+    studentNumber: "Öğrenci numarası",
+    check: "Kontrol et",
+    match: "Eşleşiyor. Bu talep bu öğrenci için oluşturulmuş.",
+    noMatch: "Eşleşmiyor. Ödeme yapmadan önce üniversiteye danışın.",
+    noKey: "Üniversitenin size gönderdiği bağlantının aynısını açın; bu kontrolün anahtarı o bağlantıda.",
+    yourPart: "Sizin adımınız",
+    lockTitle: "Harcı kilitleyin",
+    lockText:
+      "Para kimseye gitmez, emanet hesabına girer. Ödeme ortağına ancak üniversite liranın geldiğini onayladıktan sonra aktarılır. Son tarihe kadar bu gerçekleşmezse para size geri döner.",
+    connectPay: "Ödemek için cüzdanınızı bağlayın.",
+    partner: "Ödeme ortağı",
+    partnerHint: "Üniversiteye lira olarak ödeme yapan lisanslı bir şirket.",
+    partnerOption: (n, addr) => `Lisanslı ödeme ortağı ${n} (${addr})`,
+    balance: "Bakiyeniz",
+    notEnough: (symbol) => `${symbol} bakiyeniz yetersiz.`,
+    usdgPre: "Test USDG'yi",
+    usdgPost: " adresinden alabilirsiniz.",
+    askAdmin: "Test doları için demo yöneticisine başvurun.",
+    locking: "Kilitleniyor…",
+    lock: (amount, symbol) => `${amount} ${symbol} kilitle`,
+    deadlinePassed: "Son tarih geçti",
+    refundTitle: "Son tarih ödeme yapılmadan geçti",
+    refundText:
+      "Ödeme ortağı lirayı gönderdiğini hiç bildirmedi. Tutarın tamamını aile cüzdanına herkes iade edebilir.",
+    refunding: "İade ediliyor…",
+    refund: "Aileye iade et",
+    connectRefund: "İadeyi göndermek için herhangi bir cüzdanı bağlayın.",
+  },
+};
 
 export default function PayPage() {
   const params = useParams<{ invoice: string }>();
@@ -37,10 +177,12 @@ export default function PayPage() {
   // success notice with its transaction link has to stay on screen.
   const lockTx = useSendTx();
   const refundTx = useSendTx();
+  const lang = useLang();
+  const t = T[lang];
 
-  if (!id) return <DeskNote problem>This payment link is not valid.</DeskNote>;
-  if (invoice.isLoading) return <DeskNote>Loading the request…</DeskNote>;
-  if (!invoice.data) return <DeskNote problem>No tuition request exists at this link on devnet.</DeskNote>;
+  if (!id) return <DeskNote problem>{t.invalid}</DeskNote>;
+  if (invoice.isLoading) return <DeskNote>{t.loading}</DeskNote>;
+  if (!invoice.data) return <DeskNote problem>{t.notFound}</DeskNote>;
 
   const inv = invoice.data;
   const symbol = mintSymbol(inv.mint);
@@ -50,25 +192,25 @@ export default function PayPage() {
         <article className="paper airmail sheet letter tilt-l">
           <i className="clip brass" aria-hidden />
           <div className="letter-top">
-            <p className="label">Tuition request</p>
+            <p className="label">{t.tuitionRequest}</p>
             <span className="par-avion" aria-hidden>
               <b>Par avion</b>
-              By airmail
+              {t.byAirmail}
             </span>
           </div>
-          <p className="label letter-from-label">From</p>
-          <h1 className="letter-from">{school.data ?? "A registered university"}</h1>
+          <p className="label letter-from-label">{t.from}</p>
+          <h1 className="letter-from">{school.data ?? t.someUniversity}</h1>
           <p className="letter-to">
-            <span className="label">To</span>
-            the student&apos;s family
+            <span className="label">{t.to}</span>
+            {t.toFamily}
           </p>
           <div className="letter-amount">
             <p className="big-amount">
-              {formatAmount(inv.amount)}
+              {formatAmount(inv.amount, lang)}
               <small>{symbol}</small>
             </p>
             <p className="letter-sub">
-              {formatTerm(inv.term)} tuition, paid to the university as {formatTry(inv.amountTryKurus)}
+              {t.letterSub(formatTerm(inv.term, lang), formatTry(inv.amountTryKurus, lang))}
             </p>
             <div className="status-line">
               <StatusBadge status={inv.status} />{" "}
@@ -79,20 +221,20 @@ export default function PayPage() {
         </article>
 
         <div className="pay-side">
-          <Notice tx={lockTx} doneText="Locked in escrow." />
-          <Notice tx={refundTx} doneText="Refunded to the family." />
+          <Notice tx={lockTx} doneText={t.locked} />
+          <Notice tx={refundTx} doneText={t.refunded} />
           {inv.status === Status.Open && <LockFunds id={id} inv={inv} tx={lockTx} onDone={() => invoice.mutate()} />}
           {inv.status === Status.Funded && (
             <RefundIfExpired id={id} inv={inv} tx={refundTx} onDone={() => invoice.mutate()} />
           )}
           <section className="paper sheet">
             <i className="clip" aria-hidden />
-            <p className="label">Where the money is</p>
-            <h2 className="sheet-title">Progress</h2>
+            <p className="label">{t.whereMoney}</p>
+            <h2 className="sheet-title">{t.progress}</h2>
             <Timeline invoice={inv} history={history.data} />
             <div className="actions">
               <Link className="btn ghost" href={`/receipt/${id}`}>
-                Open the receipt <span className="arr" aria-hidden>→</span>
+                {t.openReceipt} <span className="arr" aria-hidden>→</span>
               </Link>
             </div>
           </section>
@@ -110,6 +252,7 @@ function Notice({ tx, doneText }: { tx: TxState; doneText: string }) {
 function VerifyStudent({ invoice, expected }: { invoice: Address; expected: ArrayLike<number> }) {
   const [ref, setRef] = useState("");
   const [result, setResult] = useState<boolean | "no-key" | null>(null);
+  const t = useT(T);
 
   async function check() {
     // the salt travels only in the link's #fragment, which never reaches a server or the chain
@@ -120,9 +263,9 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
 
   return (
     <details className="verify">
-      <summary>Check this request is for your student</summary>
+      <summary>{t.verify}</summary>
       <div className="verify-row">
-        <Field label="Student number">
+        <Field label={t.studentNumber}>
           <input
             value={ref}
             onChange={(e) => {
@@ -136,16 +279,12 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
           disabled={!ref.trim()}
           onClick={check}
         >
-          Check
+          {t.check}
         </button>
       </div>
-      {result === true && <p className="notice notice-ok">It matches. This request was issued for this student.</p>}
-      {result === false && (
-        <p className="notice notice-error">It does not match. Ask the university before you pay.</p>
-      )}
-      {result === "no-key" && (
-        <p className="notice notice-error">Open the exact link the university sent you; it carries the key for this check.</p>
-      )}
+      {result === true && <p className="notice notice-ok">{t.match}</p>}
+      {result === false && <p className="notice notice-error">{t.noMatch}</p>}
+      {result === "no-key" && <p className="notice notice-error">{t.noKey}</p>}
     </details>
   );
 }
@@ -154,6 +293,8 @@ function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx;
   const client = useApp();
   const me = useWalletAddress();
   const config = useConfig();
+  const lang = useLang();
+  const t = T[lang];
   const offices = config.data?.offices ?? [];
   const [office, setOffice] = useState<Address | "">("");
   const chosen = office || offices[0] || "";
@@ -183,51 +324,48 @@ function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx;
   return (
     <section className="paper sheet tilt-r">
       <i className="clip brass" aria-hidden />
-      <p className="label">Your part</p>
-      <h2 className="sheet-title">Lock the tuition</h2>
-      <p className="sheet-text">
-        The money goes into escrow, not to anyone. It is released to the payout partner only after the university
-        confirms the lira arrived. If that has not happened by the deadline, it comes back to you.
-      </p>
+      <p className="label">{t.yourPart}</p>
+      <h2 className="sheet-title">{t.lockTitle}</h2>
+      <p className="sheet-text">{t.lockText}</p>
       {!me ? (
-        <ConnectPrompt>Connect your wallet to pay.</ConnectPrompt>
+        <ConnectPrompt>{t.connectPay}</ConnectPrompt>
       ) : (
         <>
           <div className="fields stacked">
-            <Field label="Payout partner" hint="A licensed company that pays the university in lira.">
+            <Field label={t.partner} hint={t.partnerHint}>
               <select value={chosen} onChange={(e) => setOffice(e.target.value as Address)}>
                 {offices.map((o, i) => (
                   <option key={o} value={o}>
-                    Licensed partner {i + 1} ({shortAddress(o)})
+                    {t.partnerOption(i + 1, shortAddress(o))}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Your balance">
+            <Field label={t.balance}>
               <span className="field-value">
-                {balance.data === undefined ? "…" : `${formatAmount(balance.data)} ${symbol}`}
+                {balance.data === undefined ? "…" : `${formatAmount(balance.data, lang)} ${symbol}`}
               </span>
             </Field>
           </div>
           {short && (
             <p className="notice notice-error">
-              Not enough {symbol}.{" "}
+              {t.notEnough(symbol)}{" "}
               {symbol === "USDG" ? (
                 <>
-                  Get test USDG at{" "}
+                  {t.usdgPre}{" "}
                   <a href="https://faucet.paxos.com" target="_blank" rel="noreferrer">
                     faucet.paxos.com
                   </a>
-                  .
+                  {t.usdgPost}
                 </>
               ) : (
-                "Ask the demo admin for test dollars."
+                t.askAdmin
               )}
             </p>
           )}
           <div className="actions">
             <button className="btn" onClick={lock} disabled={!chosen || short || tx.status === "pending"}>
-              {tx.status === "pending" ? "Locking…" : `Lock ${formatAmount(inv.amount)} ${symbol}`}
+              {tx.status === "pending" ? t.locking : t.lock(formatAmount(inv.amount, lang), symbol)}
             </button>
           </div>
         </>
@@ -240,6 +378,7 @@ function RefundIfExpired({ id, inv, tx, onDone }: { id: Address; inv: Invoice; t
   const client = useApp();
   const me = useWalletAddress();
   const expired = useIsExpired(inv);
+  const t = useT(T);
   if (!expired) return null;
 
   async function refund() {
@@ -267,19 +406,17 @@ function RefundIfExpired({ id, inv, tx, onDone }: { id: Address; inv: Invoice; t
   return (
     <section className="paper sheet tilt-r">
       <i className="clip" aria-hidden />
-      <p className="label">Deadline passed</p>
-      <h2 className="sheet-title">The deadline passed with no payout</h2>
-      <p className="sheet-text">
-        The payout partner never reported sending lira. Anyone can return the full amount to the family wallet.
-      </p>
+      <p className="label">{t.deadlinePassed}</p>
+      <h2 className="sheet-title">{t.refundTitle}</h2>
+      <p className="sheet-text">{t.refundText}</p>
       {me ? (
         <div className="actions">
           <button className="btn danger" onClick={refund} disabled={tx.status === "pending"}>
-            {tx.status === "pending" ? "Refunding…" : "Refund to the family"}
+            {tx.status === "pending" ? t.refunding : t.refund}
           </button>
         </div>
       ) : (
-        <ConnectPrompt>Connect any wallet to send the refund.</ConnectPrompt>
+        <ConnectPrompt>{t.connectRefund}</ConnectPrompt>
       )}
     </section>
   );

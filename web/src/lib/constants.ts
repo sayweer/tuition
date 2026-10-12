@@ -9,18 +9,18 @@ export const TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5D
 /** Both mints use 6 decimals; the program reads decimals from the mint itself. */
 export const DECIMALS = 6;
 
-export type MintOption = { address: Address; symbol: string; label: string };
+export type MintOption = { address: Address; symbol: string; label: Record<"en" | "tr", string> };
 
 export const MINTS: MintOption[] = [
   {
     address: address("4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7"),
     symbol: "USDG",
-    label: "USDG (Paxos devnet)",
+    label: { en: "USDG (Paxos devnet)", tr: "USDG (Paxos devnet)" },
   },
   {
     address: address("7ZZoiCgpjzjDUbu7XxCNhfz7rnvhHSxKJCRe7mkz6NYz"),
     symbol: "tUSD",
-    label: "Test dollar (mock)",
+    label: { en: "Test dollar (mock)", tr: "Test doları (mock)" },
   },
 ];
 
@@ -28,10 +28,10 @@ export function mintSymbol(mint: Address): string {
   return MINTS.find((m) => m.address === mint)?.symbol ?? "tokens";
 }
 
-export const PAYMENT_WINDOWS = [
-  { secs: 60, label: "60 seconds (demo)" },
-  { secs: 10 * 60, label: "10 minutes" },
-  { secs: 3 * 24 * 60 * 60, label: "3 days" },
+export const PAYMENT_WINDOWS: { secs: number; label: Record<"en" | "tr", string> }[] = [
+  { secs: 60, label: { en: "60 seconds (demo)", tr: "60 saniye (demo)" } },
+  { secs: 10 * 60, label: { en: "10 minutes", tr: "10 dakika" } },
+  { secs: 3 * 24 * 60 * 60, label: { en: "3 days", tr: "3 gün" } },
 ];
 
 export function explorerTx(signature: string): string {

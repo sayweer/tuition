@@ -4,7 +4,8 @@ import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import Link from "next/link";
 import { explorerAddress } from "@/lib/constants";
 import { initLanding } from "./engine";
-import { L } from "./strings";
+import { useLang, useT } from "@/lib/i18n";
+import { STRINGS } from "./strings";
 import "@/styles/landing.css";
 
 const PROGRAM = "E2cES7pe38nkQk1a9J7BXkP3htCAueFsE3TrZCHnRh1A";
@@ -17,8 +18,15 @@ const at = (left: string | null, top: string | null, r: string): CardStyle => ({
   "--r": r,
 });
 
+/** Remounts the whole desk when the language changes, so every scene rebuilds from the new text. */
 export function Landing() {
+  const lang = useLang();
+  return <Desk key={lang} />;
+}
+
+function Desk() {
   const root = useRef<HTMLDivElement>(null);
+  const L = useT(STRINGS);
 
   useLayoutEffect(() => {
     const el = root.current;
@@ -28,7 +36,7 @@ export function Landing() {
 
   const c = L.card;
   return (
-    <div className="landing" ref={root}>
+    <div className="landing" ref={root} data-coin-usdg={L.so.beads.lock} data-coin-lira={L.so.beads.lira}>
       {/* 1 · HERO: a tuition link, escrow in the middle, lira to the university */}
       <section className="scene" id="hero" data-scene="hero">
         <div className="stage">

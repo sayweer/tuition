@@ -2,21 +2,74 @@
 
 import type { ReactNode } from "react";
 import { explorerAddress, explorerTx } from "@/lib/constants";
-import { Status, isExpired, shortAddress, type HistoryEntry, type Invoice } from "@/lib/escrow";
+import { Status, formatDateTime, isExpired, shortAddress, type HistoryEntry, type Invoice } from "@/lib/escrow";
 import { useNow, type TxState } from "@/lib/hooks";
+import { useLang, useT, type Dict } from "@/lib/i18n";
 
-/** The chip carries a short ink stamp; the rest of the sentence sits next to it. */
-const STATUS_COPY: Record<Status, { stamp: string; rest: string; tone: "wait" | "ok" | "back" | "info" }> = {
-  [Status.Open]: { stamp: "Issued", rest: "waiting for the family", tone: "wait" },
-  [Status.Funded]: { stamp: "Locked", rest: "waiting for the payout partner", tone: "wait" },
-  [Status.Paid]: { stamp: "Lira sent", rest: "waiting for the university", tone: "wait" },
-  [Status.Released]: { stamp: "Received", rest: "by the university", tone: "ok" },
-  [Status.Refunded]: { stamp: "Refunded", rest: "to the family", tone: "back" },
-  [Status.Resolved]: { stamp: "Settled", rest: "by the arbiter", tone: "info" },
+type Tone = "wait" | "ok" | "back" | "info";
+const TONE: Record<Status, Tone> = {
+  [Status.Open]: "wait",
+  [Status.Funded]: "wait",
+  [Status.Paid]: "wait",
+  [Status.Released]: "ok",
+  [Status.Refunded]: "back",
+  [Status.Resolved]: "info",
 };
 
+/** The chip carries a short ink stamp; the rest of the sentence sits next to it. */
+const STATUS_COPY: Dict<Record<Status, { stamp: string; rest: string }>> = {
+  en: {
+    [Status.Open]: { stamp: "Issued", rest: "waiting for the family" },
+    [Status.Funded]: { stamp: "Locked", rest: "waiting for the payout partner" },
+    [Status.Paid]: { stamp: "Lira sent", rest: "waiting for the university" },
+    [Status.Released]: { stamp: "Received", rest: "by the university" },
+    [Status.Refunded]: { stamp: "Refunded", rest: "to the family" },
+    [Status.Resolved]: { stamp: "Settled", rest: "by the arbiter" },
+  },
+  tr: {
+    [Status.Open]: { stamp: "Açıldı", rest: "aile bekleniyor" },
+    [Status.Funded]: { stamp: "Kilitlendi", rest: "ödeme ortağı bekleniyor" },
+    [Status.Paid]: { stamp: "Lira gönderildi", rest: "üniversite bekleniyor" },
+    [Status.Released]: { stamp: "Tahsil edildi", rest: "üniversite onayladı" },
+    [Status.Refunded]: { stamp: "İade edildi", rest: "aileye" },
+    [Status.Resolved]: { stamp: "Karara bağlandı", rest: "hakem tarafından" },
+  },
+};
+
+const T = {
+  en: {
+    passed: "Deadline passed",
+    left: "left",
+    d: "d",
+    h: "h",
+    m: "m",
+    pending: "Waiting for your wallet and the network…",
+    view: "View transaction",
+    confirmed: "Confirmed",
+    tx: "Transaction",
+    onChain: "Confirmed on-chain",
+    notYet: "Not yet",
+    cannotOpen: "Cannot open this link",
+  },
+  tr: {
+    passed: "Süre doldu",
+    left: "kaldı",
+    d: "g",
+    h: "sa",
+    m: "dk",
+    pending: "Cüzdanınız ve ağ bekleniyor…",
+    view: "İşlemi görüntüle",
+    confirmed: "Onaylandı",
+    tx: "İşlem",
+    onChain: "Zincirde onaylandı",
+    notYet: "Henüz değil",
+    cannotOpen: "Bu bağlantı açılamıyor",
+  },
+} satisfies Dict<Record<string, string>>;
+
 export function StatusBadge({ status }: { status: Status }) {
-  const { stamp, rest, tone } = STATUS_COPY[status];
+  const { stamp, rest } = useT(STATUS_COPY)[status];
+  const tone = TONE[status];
   return (
     <span className="status">
       <span className={`ink-chip ink-${tone}`}>{stamp}</span>
@@ -27,17 +80,19 @@ export function StatusBadge({ status }: { status: Status }) {
 
 export function Countdown({ invoice }: { invoice: Invoice }) {
   const now = useNow();
+  const t = useT(T);
   if (invoice.deadline === 0n) return null;
   const left = Number(invoice.deadline) - now;
-  if (left <= 0) return <span className="countdown expired">Deadline passed</span>;
+  if (left <= 0) return <span className="countdown expired">{t.passed}</span>;
   const d = Math.floor(left / 86400);
   const h = Math.floor((left % 86400) / 3600);
   const m = Math.floor((left % 3600) / 60);
   const s = left % 60;
-  const text = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}:${String(s).padStart(2, "0")}`;
+  const text =
+    d > 0 ? `${d}${t.d} ${h}${t.h}` : h > 0 ? `${h}${t.h} ${m}${t.m}` : `${m}:${String(s).padStart(2, "0")}`;
   return (
     <span className="countdown" aria-live="off">
-      {text} left
+      {text} {t.left}
     </span>
   );
 }
@@ -48,14 +103,15 @@ export function useIsExpired(invoice: Invoice | null | undefined): boolean {
 }
 
 export function TxNotice({ tx, doneText }: { tx: TxState; doneText: string }) {
-  if (tx.status === "pending") return <p className="notice">Waiting for your wallet and the network…</p>;
+  const t = useT(T);
+  if (tx.status === "pending") return <p className="notice">{t.pending}</p>;
   if (tx.status === "error") return <p className="notice notice-error" role="alert">{tx.error}</p>;
   if (tx.status === "done" && tx.signature)
     return (
       <p className="notice notice-ok" role="status">
         {doneText}{" "}
         <a href={explorerTx(tx.signature)} target="_blank" rel="noreferrer">
-          View transaction
+          {t.view}
         </a>
       </p>
     );
@@ -80,19 +136,37 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-const SEQUENCE: { step: HistoryEntry["step"]; text: string }[] = [
-  { step: "Created", text: "University issued the request" },
-  { step: "Locked", text: "Family locked the tuition in escrow" },
-  { step: "TRY sent", text: "Payout partner sent lira to the university's bank" },
-  { step: "Signed", text: "University confirmed receipt with its own key" },
-];
+type StepCopy = { step: HistoryEntry["step"]; text: string };
+const SEQUENCE: Dict<StepCopy[]> = {
+  en: [
+    { step: "Created", text: "University issued the request" },
+    { step: "Locked", text: "Family locked the tuition in escrow" },
+    { step: "TRY sent", text: "Payout partner sent lira to the university's bank" },
+    { step: "Signed", text: "University confirmed receipt with its own key" },
+  ],
+  tr: [
+    { step: "Created", text: "Üniversite talebi açtı" },
+    { step: "Locked", text: "Aile harcı emanet hesabına kilitledi" },
+    { step: "TRY sent", text: "Ödeme ortağı lirayı üniversitenin bankasına gönderdi" },
+    { step: "Signed", text: "Üniversite tahsilatı kendi anahtarıyla onayladı" },
+  ],
+};
 
-const TERMINAL: Partial<Record<Status, { step: HistoryEntry["step"]; text: string }>> = {
-  [Status.Refunded]: { step: "Refunded", text: "Deadline passed without payout: refunded to the family" },
-  [Status.Resolved]: { step: "Resolved", text: "Arbiter settled the dispute" },
+const TERMINAL: Dict<Partial<Record<Status, StepCopy>>> = {
+  en: {
+    [Status.Refunded]: { step: "Refunded", text: "Deadline passed without payout: refunded to the family" },
+    [Status.Resolved]: { step: "Resolved", text: "Arbiter settled the dispute" },
+  },
+  tr: {
+    [Status.Refunded]: { step: "Refunded", text: "Süre ödeme yapılmadan doldu: aileye iade edildi" },
+    [Status.Resolved]: { step: "Resolved", text: "Hakem anlaşmazlığı karara bağladı" },
+  },
 };
 
 export function Timeline({ invoice, history }: { invoice: Invoice; history: HistoryEntry[] | undefined }) {
+  const lang = useLang();
+  const t = T[lang];
+  const sequence = SEQUENCE[lang];
   // A step counts as done only when the invoice account itself says so; history only adds the link.
   const reached: Record<HistoryEntry["step"], boolean> = {
     Created: true,
@@ -102,13 +176,13 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
     Refunded: invoice.status === Status.Refunded,
     Resolved: invoice.status === Status.Resolved,
   };
-  const terminal = TERMINAL[invoice.status];
+  const terminal = TERMINAL[lang][invoice.status];
   // Once settled, steps that never happened (e.g. confirmed before the partner reported) are dropped.
   const steps = terminal
-    ? [...SEQUENCE.filter((s) => reached[s.step]), terminal]
+    ? [...sequence.filter((s) => reached[s.step]), terminal]
     : invoice.status === Status.Released
-      ? SEQUENCE.filter((s) => reached[s.step])
-      : SEQUENCE;
+      ? sequence.filter((s) => reached[s.step])
+      : sequence;
   return (
     <ol className="timeline">
       {steps.map((s, i) => {
@@ -123,13 +197,13 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
               <p className="timeline-text">{s.text}</p>
               {entry ? (
                 <p className="timeline-meta">
-                  {entry.blockTime ? new Date(entry.blockTime * 1000).toLocaleString("en-GB") : "Confirmed"}{" "}
+                  {entry.blockTime ? formatDateTime(entry.blockTime, lang) : t.confirmed}{" "}
                   <a href={explorerTx(entry.signature)} target="_blank" rel="noreferrer">
-                    Transaction
+                    {t.tx}
                   </a>
                 </p>
               ) : (
-                <p className="timeline-meta">{done ? "Confirmed on-chain" : "Not yet"}</p>
+                <p className="timeline-meta">{done ? t.onChain : t.notYet}</p>
               )}
             </div>
           </li>
@@ -151,12 +225,13 @@ export function ConnectPrompt({ children }: { children: ReactNode }) {
 
 /** Whole-page state before a document exists: loading text on the desk, or a paper note for a bad link. */
 export function DeskNote({ children, problem = false }: { children: ReactNode; problem?: boolean }) {
+  const t = useT(T);
   return (
     <main className="desk-page">
       {problem ? (
         <div className="paper sheet tilt-l problem">
           <i className="clip" aria-hidden />
-          <p className="label">Cannot open this link</p>
+          <p className="label">{t.cannotOpen}</p>
           <p className="problem-text">{children}</p>
         </div>
       ) : (

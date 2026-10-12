@@ -7,6 +7,7 @@ import { useClient } from "@solana/react";
 import useSWR from "swr";
 import type { AppClient } from "@/app/providers";
 import { describeError, fetchConfig, fetchInvoice, fetchPayeeName, invoiceHistory } from "./escrow";
+import { useLang } from "./i18n";
 
 const REFRESH_MS = 4000;
 
@@ -60,6 +61,7 @@ export type TxState = { status: "idle" | "pending" | "done" | "error"; signature
 /** Sends instructions with the connected wallet and tracks the outcome for the UI. */
 export function useSendTx() {
   const client = useApp();
+  const lang = useLang();
   const [state, setState] = useState<TxState>({ status: "idle" });
 
   const send = useCallback(
@@ -73,11 +75,11 @@ export function useSendTx() {
         return signature;
       } catch (e) {
         console.error(e);
-        setState({ status: "error", error: describeError(e) });
+        setState({ status: "error", error: describeError(e, lang) });
         return null;
       }
     },
-    [client],
+    [client, lang],
   );
 
   return { ...state, send, reset: () => setState({ status: "idle" }) };

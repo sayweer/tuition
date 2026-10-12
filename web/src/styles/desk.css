@@ -325,6 +325,23 @@ body.desk {
   background: rgba(29, 26, 22, 0.06);
 }
 
+.lang-switch {
+  display: inline-flex;
+  margin-left: 4px;
+  padding: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.navcard .lang-switch button {
+  padding: 7px 8px;
+  font-size: 11px;
+  color: rgba(243, 236, 223, 0.7);
+}
+.navcard .lang-switch button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--paper);
+}
+
 .site-foot {
   display: flex;
   justify-content: space-between;

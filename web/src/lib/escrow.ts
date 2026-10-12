@@ -25,6 +25,7 @@ import {
   type Invoice,
 } from "@/generated/tuition-escrow";
 import { DECIMALS } from "./constants";
+import { locale, type Dict, type Lang } from "./i18n";
 
 type AnyRpc = Rpc<SolanaRpcApi>;
 
@@ -167,28 +168,40 @@ export async function invoiceHistory(rpc: AnyRpc, invoice: Address): Promise<His
 // ---------------------------------------------------------- formatting
 
 /** Shows every significant decimal (at least two), so what is displayed is exactly what moves. */
-export function formatAmount(base: bigint, decimals = DECIMALS): string {
-  const value = Number(base) / 10 ** decimals;
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: decimals });
+export function formatAmount(base: bigint, lang: Lang = "en"): string {
+  const value = Number(base) / 10 ** DECIMALS;
+  return value.toLocaleString(locale(lang), { minimumFractionDigits: 2, maximumFractionDigits: DECIMALS });
 }
 
-export function formatTry(kurus: bigint): string {
-  return (Number(kurus) / 100).toLocaleString("en-US", { style: "currency", currency: "TRY" });
+export function formatTry(kurus: bigint, lang: Lang = "en"): string {
+  return (Number(kurus) / 100).toLocaleString(locale(lang), { style: "currency", currency: "TRY" });
 }
 
-/** Parses a decimal string ("300", "300.5") into base units without float rounding. */
+export function formatDateTime(unixSecs: number | bigint, lang: Lang = "en"): string {
+  return new Date(Number(unixSecs) * 1000).toLocaleString(lang === "tr" ? "tr-TR" : "en-GB");
+}
+
+/** Parses a decimal string ("300", "300.5", or "300,5" as typed in Turkish) into base units
+ *  without float rounding. More decimals than the unit allows is rejected, not truncated. */
 export function parseAmount(input: string, decimals = DECIMALS): bigint | null {
-  const m = /^(\d+)(?:\.(\d*))?$/.exec(input.trim());
+  const raw = input.trim();
+  const normalised = raw.includes(",") && !raw.includes(".") ? raw.replace(",", ".") : raw;
+  const m = /^(\d+)(?:\.(\d*))?$/.exec(normalised);
   if (!m || (m[2] ?? "").length > decimals) return null;
-  const frac = (m[2] ?? "").slice(0, decimals).padEnd(decimals, "0");
+  const frac = (m[2] ?? "").padEnd(decimals, "0");
   return BigInt(m[1]) * 10n ** BigInt(decimals) + BigInt(frac || "0");
 }
 
-const SEASONS: Record<number, string> = { 1: "Fall", 2: "Spring", 3: "Summer" };
+const SEASONS: Dict<Record<number, string>> = {
+  en: { 1: "Fall", 2: "Spring", 3: "Summer" },
+  tr: { 1: "Güz", 2: "Bahar", 3: "Yaz" },
+};
 
 /** Term code = year * 10 + season (1 fall, 2 spring, 3 summer). */
-export function formatTerm(term: number): string {
-  return `${SEASONS[term % 10] ?? "Term"} ${Math.floor(term / 10)}`;
+export function formatTerm(term: number, lang: Lang = "en"): string {
+  const season = SEASONS[lang][term % 10] ?? (lang === "tr" ? "Dönem" : "Term");
+  const year = Math.floor(term / 10);
+  return lang === "tr" ? `${year} ${season}` : `${season} ${year}`;
 }
 
 export function shortAddress(a: string): string {
@@ -224,30 +237,70 @@ export function isExpired(inv: Invoice, nowSecs: number): boolean {
 
 // --------------------------------------------------------------- errors
 
-const PROGRAM_ERRORS: Record<number, string> = {
-  6000: "Config is invalid.",
-  6001: "One wallet cannot be both payout partner, arbiter and university.",
-  6002: "Name must be 1 to 64 characters.",
-  6003: "Amount must be more than zero.",
-  6004: "Payment window is out of range.",
-  6005: "This currency is not accepted.",
-  6006: "This token has a transfer hook, which escrow does not support.",
-  6007: "This payout partner is not on the approved list.",
-  6008: "The family, payout partner and university must be three different wallets.",
-  6009: "This request has already moved on. Refresh the page.",
-  6010: "The payout partner reported sending lira. Only the university or the arbiter can settle it now.",
-  6011: "Nothing reached escrow.",
-  6012: "Attach the bank receipt first.",
-  6013: "The deadline has passed.",
-  6014: "The deadline has not passed yet.",
-  6015: "Only the admin can do this.",
-  6016: "Only the university that issued this request can confirm it.",
-  6017: "Only the selected payout partner can do this.",
-  6018: "Only the arbiter can do this.",
-  6019: "Wrong currency for this request.",
-  6020: "That account does not belong to the party in the ruling.",
-  6021: "Math overflow.",
-  6022: "Escrow balance does not match the expected payout.",
+const PROGRAM_ERRORS: Dict<Record<number, string>> = {
+  en: {
+    6000: "Config is invalid.",
+    6001: "One wallet cannot be both payout partner, arbiter and university.",
+    6002: "Name must be 1 to 64 characters.",
+    6003: "Amount must be more than zero.",
+    6004: "Payment window is out of range.",
+    6005: "This currency is not accepted.",
+    6006: "This token has a transfer hook, which escrow does not support.",
+    6007: "This payout partner is not on the approved list.",
+    6008: "The family, payout partner and university must be three different wallets.",
+    6009: "This request has already moved on. Refresh the page.",
+    6010: "The payout partner reported sending lira. Only the university or the arbiter can settle it now.",
+    6011: "Nothing reached escrow.",
+    6012: "Attach the bank receipt first.",
+    6013: "The deadline has passed.",
+    6014: "The deadline has not passed yet.",
+    6015: "Only the admin can do this.",
+    6016: "Only the university that issued this request can confirm it.",
+    6017: "Only the selected payout partner can do this.",
+    6018: "Only the arbiter can do this.",
+    6019: "Wrong currency for this request.",
+    6020: "That account does not belong to the party in the ruling.",
+    6021: "Math overflow.",
+    6022: "Escrow balance does not match the expected payout.",
+  },
+  tr: {
+    6000: "Yapılandırma geçersiz.",
+    6001: "Bir cüzdan hem ödeme ortağı, hem hakem, hem de üniversite olamaz.",
+    6002: "Ad 1 ile 64 karakter arasında olmalı.",
+    6003: "Tutar sıfırdan büyük olmalı.",
+    6004: "Ödeme süresi izin verilen aralığın dışında.",
+    6005: "Bu para birimi kabul edilmiyor.",
+    6006: "Bu token'da transfer hook var; emanet hesabı bunu desteklemiyor.",
+    6007: "Bu ödeme ortağı onaylı listede değil.",
+    6008: "Aile, ödeme ortağı ve üniversite üç farklı cüzdan olmalı.",
+    6009: "Bu talep bir sonraki aşamaya geçmiş. Sayfayı yenileyin.",
+    6010: "Ödeme ortağı lirayı gönderdiğini bildirdi. Artık yalnızca üniversite ya da hakem sonuçlandırabilir.",
+    6011: "Emanet hesabına hiçbir şey ulaşmadı.",
+    6012: "Önce banka dekontunu ekleyin.",
+    6013: "Son tarih geçti.",
+    6014: "Son tarih henüz gelmedi.",
+    6015: "Bunu yalnızca yönetici yapabilir.",
+    6016: "Bu talebi yalnızca onu açan üniversite onaylayabilir.",
+    6017: "Bunu yalnızca seçilen ödeme ortağı yapabilir.",
+    6018: "Bunu yalnızca hakem yapabilir.",
+    6019: "Bu talep için yanlış para birimi.",
+    6020: "Bu hesap, kararda adı geçen tarafa ait değil.",
+    6021: "Hesaplama taşması.",
+    6022: "Emanet bakiyesi beklenen ödemeyle eşleşmiyor.",
+  },
+};
+
+const WALLET_ERRORS: Dict<{ cancelled: string; balance: string; slow: string }> = {
+  en: {
+    cancelled: "You cancelled the request in your wallet.",
+    balance: "Not enough balance. Top up devnet SOL or tokens and try again.",
+    slow: "The network took too long. Try again.",
+  },
+  tr: {
+    cancelled: "İsteği cüzdanınızda iptal ettiniz.",
+    balance: "Bakiye yetersiz. Devnet SOL ya da token yükleyip tekrar deneyin.",
+    slow: "Ağ çok geç yanıt verdi. Tekrar deneyin.",
+  },
 };
 
 function findCustomCode(e: unknown, depth = 0): number | null {
@@ -262,12 +315,13 @@ function findCustomCode(e: unknown, depth = 0): number | null {
   return null;
 }
 
-export function describeError(e: unknown): string {
+export function describeError(e: unknown, lang: Lang = "en"): string {
   const code = findCustomCode(e);
-  if (code !== null && PROGRAM_ERRORS[code]) return PROGRAM_ERRORS[code];
+  if (code !== null && PROGRAM_ERRORS[lang][code]) return PROGRAM_ERRORS[lang][code];
   const msg = e instanceof Error ? e.message : String(e);
-  if (/reject|denied|cancel/i.test(msg)) return "You cancelled the request in your wallet.";
-  if (/insufficient (funds|lamports)|0x1\b/i.test(msg)) return "Not enough balance. Top up devnet SOL or tokens and try again.";
-  if (/blockhash/i.test(msg)) return "The network took too long. Try again.";
+  const w = WALLET_ERRORS[lang];
+  if (/reject|denied|cancel/i.test(msg)) return w.cancelled;
+  if (/insufficient (funds|lamports)|0x1\b/i.test(msg)) return w.balance;
+  if (/blockhash/i.test(msg)) return w.slow;
   return msg;
 }

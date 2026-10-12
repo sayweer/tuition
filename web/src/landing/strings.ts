@@ -3,7 +3,7 @@
  *  today the wire disappears between banks for days and arrives short →
  *  so the money waits in escrow until the university signs for the lira →
  *  and when something goes wrong, rules decide: refund by default, arbiter for disputes. */
-export const L = {
+const en = {
   hero: {
     eyebrow: "Tuition from abroad",
     l1: "Families pay one link.",
@@ -48,7 +48,7 @@ export const L = {
       ["Correspondent bank", "day 2", "where is it?", "q"],
       ["Fees + FX spread", "$45 + 4%", "who pays?", "q"],
       ["University received", "₺10,840", "₺1,160 short", "x"],
-    ] as const,
+    ] as [string, string, string, "q" | "x"][],
   },
   so: {
     title: "So the money waits in escrow until the university signs.",
@@ -75,7 +75,7 @@ export const L = {
       ["00", " · 300 USDG locked"],
       ["02", " · ₺12,000 sent"],
       ["03", " · signed by the university"],
-    ] as const,
+    ] as [string, string][],
     beads: { lock: "300 USDG", lira: "₺12,000", release: "300 USDG" },
   },
   rules: {
@@ -109,3 +109,112 @@ export const L = {
     program: "See the program on Solana",
   },
 };
+
+const tr: typeof en = {
+  hero: {
+    eyebrow: "Yurt dışından harç",
+    l1: "Aile tek linkten öder.",
+    l2: "Üniversite, lira",
+    l3: "gelince imzalar.",
+    lede:
+      "Üniversite bir harç linki gönderir. Aile USDG'yi Solana'daki emanet hesabına kilitler. Lisanslı bir ödeme ortağı üniversiteye lirayı öder; emanet ancak üniversite kendi anahtarıyla onayladığında açılır. Bu onay, herkesin doğrulayabileceği bir makbuz olarak kalır.",
+    start: "Harç talebi oluştur",
+    see: "Nasıl çalıştığını gör",
+  },
+  card: {
+    family: "Aile · Lagos",
+    familyName: "Ngozi Okafor",
+    link: "harç linki #A3F2",
+    invoice: "2026 Güz harcı",
+    invoiceFor: "Amara Okafor",
+    invoiceAmt: "300 USDG ≈ ₺12.000",
+    deadline: "72 saat süre",
+    hashed: "öğrenci no. gizli",
+    escrow: "Emanet · Solana",
+    escrowAmt: "300 USDG kilitli",
+    bead: "300 USDG",
+    partner: "Bosphorus Pay",
+    partnerRole: "lisanslı ödeme ortağı",
+    bursar: "Mali işler",
+    bursarRole: "Istanbul Demo University",
+    student: "Amara",
+    studentRole: "öğrenci · kaydı yapıldı",
+  },
+  but: {
+    titleA: "Ama harç bankalar arasında ",
+    titleEm: "kayboluyor",
+    titleB: ".",
+    note1: "“Kayıtlar cuma günü kapanıyor.”",
+    sig1: "Öğrenci işleri",
+    note2: "“Banka üç ila beş iş günü diyor.”",
+    sig2: "Ngozi, Lagos",
+    note3: "Tamamını ödedik. Okul eksik geldiğini söylüyor.",
+    sheetFile: "Havale · Lagos → İstanbul",
+    sheetSent: "pazartesi gönderildi",
+    rows: [
+      ["Muhabir banka", "2. gün", "para nerede?", "q"],
+      ["Masraf + kur farkı", "$45 + %4", "kim ödüyor?", "q"],
+      ["Üniversiteye ulaşan", "₺10.840", "₺1.160 eksik", "x"],
+    ],
+  },
+  so: {
+    title: "Bu yüzden para, üniversite imzalayana kadar emanette bekler.",
+    invoice: "Talep A3F2 · 2026 Güz",
+    invoiceWho: "Amara Okafor",
+    escrow: "Emanet · kilitli",
+    slip: "FAST dekontu",
+    slipLine: "Bosphorus Pay → Istanbul Demo Univ.",
+    slipAmt: "₺12.000,00",
+    slipRef: "açıklama TUITION A3F2 · hash işlendi",
+    bursar: "Mali işler · Istanbul Demo University",
+    bursarNote: "Lira hesabımıza geçti. Onaylıyoruz.",
+    payout: "Bosphorus Pay'e aktarıldı",
+    stamp: "TAHSİL EDİLDİ",
+    steps: [
+      "Aile harcı herhangi bir cüzdandan kilitler",
+      "Lisanslı ortak lirayı FAST ile gönderir",
+      "Üniversite kendi anahtarıyla onaylar",
+      "Emanet ortağa ödenir. Makbuz kalır.",
+    ],
+    window: "Ödeme süresi · 72 saat",
+    hour: "saat",
+    flags: [
+      ["00", " · 300 USDG kilitlendi"],
+      ["02", " · ₺12.000 gönderildi"],
+      ["03", " · üniversite imzaladı"],
+    ],
+    beads: { lock: "300 USDG", lira: "₺12.000", release: "300 USDG" },
+  },
+  rules: {
+    title: "Bir şeyler ters giderse kurallar karar verir. Bir insan değil.",
+    caseA: "Durum A · kimse ödeme yapmadı",
+    caseAH: "Süre dolar. Parayı herkes aileye iade ettirebilir.",
+    refundTo: "Ngozi'ye geri",
+    refunded: "İADE EDİLDİ",
+    caseB: "Durum B · ödendi ama onaylanmadı",
+    partnerSays: "Bosphorus Pay ₺12.000 gönderdiğini söylüyor",
+    bursarSilent: "Üniversite henüz onaylamadı",
+    frozen: "DONDURULDU",
+    arbiter: "Hakem · 10:40",
+    arbiterNote:
+      "Banka dekontunu inceleyip karar veriyorum. Para yalnızca ödeme ortağına ya da aileye gidebilir. Başka hiçbir yere değil.",
+    ruler: "Ödeme süresi",
+    limit: "son tarih · 72. saat",
+    log: [
+      "09:04  300 USDG kilitlendi · talep A3F2",
+      "09:41  FAST dekont hash'i işlendi · Bosphorus Pay",
+      "10:12  Istanbul Demo University imzaladı → aktarıldı",
+    ],
+  },
+  close: {
+    term: "2027 Bahar",
+    opens: "talepler açık",
+    label: "Kayıt günü · harç tahsil edildi · makbuz mühürlendi",
+    title: "Lira ile ödendi. Üniversite imzaladı.",
+    body:
+      "Talebi oluşturun, linki aileye gönderin, lira hesabınıza geçince onaylayın. Gerisini emanet hesabı ve zincirdeki makbuz halleder.",
+    program: "Programı Solana'da gör",
+  },
+};
+
+export const STRINGS = { en, tr };

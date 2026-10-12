@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { locale, useLang } from "@/lib/i18n";
 
 // Two arcs of ring text, split by the band across the middle. Each spans 144°.
 const SPAN = (144 / 180) * Math.PI;
@@ -47,13 +48,16 @@ export function Stamp({
   tone?: "ok" | "back" | "info";
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  // Turkish needs its own casing rules: i → İ, not I.
+  const lang = useLang();
+  const upper = (text: string) => text.toLocaleUpperCase(locale(lang));
   const [top = "", ...rest] = ring
     .split("★")
     .map((s) => s.trim())
     .filter(Boolean);
   const bottom = rest.join(" ★ ");
-  const word = center.toUpperCase();
-  const subLines = sub ? twoLines(sub.toUpperCase()) : [];
+  const word = upper(center);
+  const subLines = sub ? twoLines(upper(sub)) : [];
   const subSize = Math.min(9.5, 82 / (Math.max(0, ...subLines.map((l) => l.length)) * 0.6 || 1));
   const cls = tone === "ok" ? "stamp" : `stamp stamp-${tone}`;
 
@@ -83,15 +87,15 @@ export function Stamp({
           <circle cx="100" cy="100" r="88" strokeWidth="1.2" />
           <circle cx="100" cy="100" r="62" strokeWidth="1.2" />
         </g>
-        <text className="stamp-arc" textAnchor="middle" {...fit(top.toUpperCase(), TOP_R * SPAN)}>
+        <text className="stamp-arc" textAnchor="middle" {...fit(upper(top), TOP_R * SPAN)}>
           <textPath href={`#${uid}-top`} startOffset="50%">
-            {top.toUpperCase()}
+            {upper(top)}
           </textPath>
         </text>
         {bottom && (
-          <text className="stamp-arc" textAnchor="middle" {...fit(bottom.toUpperCase(), BOTTOM_R * SPAN)}>
+          <text className="stamp-arc" textAnchor="middle" {...fit(upper(bottom), BOTTOM_R * SPAN)}>
             <textPath href={`#${uid}-bottom`} startOffset="50%">
-              {bottom.toUpperCase()}
+              {upper(bottom)}
             </textPath>
           </text>
         )}
