@@ -1,0 +1,40 @@
+[package]
+name = "tuition_escrow"
+version = "0.1.0"
+description = "Tuition escrow: family locks USDG, licensed office pays TRY, university signs the receipt"
+edition.workspace = true
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "tuition_escrow"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "=1.1.2"
+anchor-spl = "=1.1.2"
+
+[dev-dependencies]
+litesvm = "0.9.1"
+solana-keypair = "3"
+solana-signer = "3"
+solana-transaction = "3"
+solana-message = "3"
+solana-instruction = "3"
+solana-clock = "3"
+solana-system-interface = { version = "3", features = ["bincode"] }
+spl-token-2022-interface = "2"
+spl-associated-token-account-interface = "2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
