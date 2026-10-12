@@ -1,5 +1,7 @@
 # Tuition
 
+**Live app: [tuition-omega.vercel.app](https://tuition-omega.vercel.app)** (Solana devnet)
+
 A family abroad locks a Turkish university's tuition in USDG on Solana. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the student and the university can each check on their own.
 
 Built for the Colosseum Crypto World's Fair (Superteam Türkiye local track and Arf × Superteam TR university track). Runs on **Solana devnet** with test tokens.
