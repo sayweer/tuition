@@ -35,27 +35,32 @@ export default function SchoolPage() {
   const payee = usePayeeName(me);
 
   return (
-    <>
-      <h1 className="page-title">University desk</h1>
-      <p className="lede">
-        Issue a tuition request, send the link to the family, and confirm when the lira reaches your bank. Your
-        confirmation is the receipt.
-      </p>
-      <div style={{ marginTop: "2rem" }}>
-        {!me ? (
-          <ConnectPrompt>Connect the university&apos;s finance wallet to continue.</ConnectPrompt>
-        ) : payee.isLoading ? (
-          <p className="muted">Checking registration…</p>
-        ) : !payee.data ? (
-          <ConnectPrompt>
-            This wallet ({shortAddress(me)}) is not a registered university. The platform admin registers each
-            finance office once; send them this address.
-          </ConnectPrompt>
-        ) : (
-          <Desk me={me} name={payee.data} />
-        )}
-      </div>
-    </>
+    <main className="desk-page">
+      <header className="page-head">
+        <div>
+          <p className="tag">University desk</p>
+          <h1 className="page-title">
+            Issue the request, <em>sign the receipt.</em>
+          </h1>
+          <p className="page-lede">
+            Issue a tuition request, send the link to the family, and confirm when the lira reaches your bank. Your
+            confirmation is the receipt.
+          </p>
+        </div>
+      </header>
+      {!me ? (
+        <ConnectPrompt>Connect the university&apos;s finance wallet to continue.</ConnectPrompt>
+      ) : payee.isLoading ? (
+        <p className="desk-muted">Checking registration…</p>
+      ) : !payee.data ? (
+        <ConnectPrompt>
+          This wallet ({shortAddress(me)}) is not a registered university. The platform admin registers each finance
+          office once; send them this address.
+        </ConnectPrompt>
+      ) : (
+        <Desk me={me} name={payee.data} />
+      )}
+    </main>
   );
 }
 
@@ -65,22 +70,29 @@ function Desk({ me, name }: { me: Address; name: string }) {
     refreshInterval: 5000,
   });
   return (
-    <>
-      <p className="row-meta">Signed in as {name}</p>
-      <CreateRequest me={me} onCreated={() => requests.mutate()} />
-      <h2 className="section-title">Your requests</h2>
-      {requests.isLoading ? (
-        <p className="muted">Loading requests…</p>
-      ) : requests.data?.length ? (
-        <div className="rows">
-          {requests.data.map((r) => (
-            <RequestRow key={r.address} row={r} onChange={() => requests.mutate()} />
-          ))}
-        </div>
-      ) : (
-        <p className="muted">No requests yet. Issue the first one above.</p>
-      )}
-    </>
+    <div className="desk-cols">
+      <div className="col">
+        <p className="nameplate">
+          <span className="label">Signed in as</span>
+          <b>{name}</b>
+        </p>
+        <CreateRequest me={me} onCreated={() => requests.mutate()} />
+      </div>
+      <section className="col">
+        <h2 className="tag">Your requests</h2>
+        {requests.isLoading ? (
+          <p className="desk-muted">Loading requests…</p>
+        ) : requests.data?.length ? (
+          <div className="slips">
+            {requests.data.map((r) => (
+              <RequestRow key={r.address} row={r} onChange={() => requests.mutate()} />
+            ))}
+          </div>
+        ) : (
+          <p className="desk-muted">No requests yet. Each one you issue lands here as a slip.</p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -123,9 +135,11 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   }
 
   return (
-    <section className="panel" style={{ marginTop: "1.25rem" }}>
-      <h2 className="row-title">New tuition request</h2>
-      <div className="form-grid" style={{ marginTop: "1rem" }}>
+    <section className="paper sheet tilt-l">
+      <i className="clip" aria-hidden />
+      <p className="label">Finance office</p>
+      <h2 className="sheet-title">New tuition request</h2>
+      <div className="fields">
         <Field label="Amount" hint={`In ${mintSymbol(mint)}. The family locks exactly this.`}>
           <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
@@ -164,7 +178,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
         </Field>
       </div>
       <div className="actions">
-        <button className="btn btn-primary" disabled={!valid || tx.status === "pending"} onClick={submit}>
+        <button className="btn" disabled={!valid || tx.status === "pending"} onClick={submit}>
           {tx.status === "pending" ? "Issuing…" : "Issue request"}
         </button>
       </div>
@@ -179,15 +193,15 @@ function ShareLink({ invoice }: { invoice: Address }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="share">
-      <div style={{ background: "#fff", padding: 8, border: "1px solid var(--rule)", borderRadius: 6 }}>
+      <div className="qr">
         <QRCodeSVG value={url} size={148} marginSize={0} />
       </div>
-      <div style={{ minWidth: 0 }}>
-        <p className="row-title">Send this to the family</p>
-        <p className="hash">{url}</p>
-        <div className="actions" style={{ marginTop: "0.75rem" }}>
+      <div>
+        <p className="label">Send this to the family</p>
+        <p className="paylink">{url}</p>
+        <div className="actions">
           <button
-            className="btn btn-quiet"
+            className="btn paperbtn"
             onClick={async () => {
               await navigator.clipboard.writeText(url);
               setCopied(true);
@@ -195,8 +209,8 @@ function ShareLink({ invoice }: { invoice: Address }) {
           >
             {copied ? "Copied" : "Copy link"}
           </button>
-          <Link className="btn btn-quiet" href={`/pay/${invoice}`}>
-            Open payment page
+          <Link className="btn ghost" href={`/pay/${invoice}`}>
+            Open payment page <span className="arr" aria-hidden>→</span>
           </Link>
         </div>
       </div>
@@ -231,37 +245,34 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
   }
 
   return (
-    <div className="row">
-      <div>
-        <p className="row-title">
-          {formatTerm(inv.term)}, {formatAmount(inv.amount)} {mintSymbol(inv.mint)}
-        </p>
-        <p className="row-meta">
-          {formatTry(inv.amountTryKurus)} quote, request {shortAddress(row.address)}
-        </p>
-      </div>
-      <div>
-        <StatusBadge status={inv.status} />{" "}
+    <article className="paper sheet slip">
+      <i className={canConfirm ? "clip brass" : "clip"} aria-hidden />
+      <p className="label">
+        {formatTerm(inv.term)} · request {shortAddress(row.address)}
+      </p>
+      <p className="slip-amount">
+        {formatAmount(inv.amount)}
+        <small>{mintSymbol(inv.mint)}</small>
+      </p>
+      <p className="slip-meta">Lira quote {formatTry(inv.amountTryKurus)}</p>
+      <div className="status-line">
+        <StatusBadge status={inv.status} />
         {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
-        {inv.status === Status.Funded && (
-          <p className="row-meta">The partner has not reported the lira yet. Confirm only if it reached your bank.</p>
-        )}
       </div>
-      <div className="actions" style={{ marginTop: 0 }}>
+      {inv.status === Status.Funded && (
+        <p className="slip-note">The partner has not reported the lira yet. Confirm only if it reached your bank.</p>
+      )}
+      <div className="actions">
         {canConfirm && (
-          <button className="btn btn-primary" onClick={confirm} disabled={tx.status === "pending"}>
+          <button className="btn" onClick={confirm} disabled={tx.status === "pending"}>
             {tx.status === "pending" ? "Confirming…" : "Confirm lira received"}
           </button>
         )}
-        <Link className="btn btn-quiet" href={inv.status === Status.Open ? `/pay/${row.address}` : `/receipt/${row.address}`}>
-          {inv.status === Status.Open ? "Payment page" : "Receipt"}
+        <Link className="btn ghost" href={inv.status === Status.Open ? `/pay/${row.address}` : `/receipt/${row.address}`}>
+          {inv.status === Status.Open ? "Payment page" : "Receipt"} <span className="arr" aria-hidden>→</span>
         </Link>
       </div>
-      {tx.status !== "idle" && (
-        <div style={{ gridColumn: "1 / -1" }}>
-          <TxNotice tx={tx} doneText="Confirmed. Escrow released to the payout partner." />
-        </div>
-      )}
-    </div>
+      {tx.status !== "idle" && <TxNotice tx={tx} doneText="Confirmed. Escrow released to the payout partner." />}
+    </article>
   );
 }

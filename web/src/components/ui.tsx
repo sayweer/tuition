@@ -5,18 +5,24 @@ import { explorerAddress, explorerTx } from "@/lib/constants";
 import { Status, isExpired, shortAddress, type HistoryEntry, type Invoice } from "@/lib/escrow";
 import { useNow, type TxState } from "@/lib/hooks";
 
-const STATUS_COPY: Record<Status, { label: string; tone: "wait" | "ok" | "back" | "info" }> = {
-  [Status.Open]: { label: "Waiting for the family", tone: "info" },
-  [Status.Funded]: { label: "Locked, waiting for the payout partner", tone: "wait" },
-  [Status.Paid]: { label: "Lira sent, waiting for the university", tone: "wait" },
-  [Status.Released]: { label: "Received by the university", tone: "ok" },
-  [Status.Refunded]: { label: "Refunded to the family", tone: "back" },
-  [Status.Resolved]: { label: "Settled by the arbiter", tone: "info" },
+/** The chip carries a short ink stamp; the rest of the sentence sits next to it. */
+const STATUS_COPY: Record<Status, { stamp: string; rest: string; tone: "wait" | "ok" | "back" | "info" }> = {
+  [Status.Open]: { stamp: "Issued", rest: "waiting for the family", tone: "wait" },
+  [Status.Funded]: { stamp: "Locked", rest: "waiting for the payout partner", tone: "wait" },
+  [Status.Paid]: { stamp: "Lira sent", rest: "waiting for the university", tone: "wait" },
+  [Status.Released]: { stamp: "Received", rest: "by the university", tone: "ok" },
+  [Status.Refunded]: { stamp: "Refunded", rest: "to the family", tone: "back" },
+  [Status.Resolved]: { stamp: "Settled", rest: "by the arbiter", tone: "info" },
 };
 
 export function StatusBadge({ status }: { status: Status }) {
-  const { label, tone } = STATUS_COPY[status];
-  return <span className={`badge badge-${tone}`}>{label}</span>;
+  const { stamp, rest, tone } = STATUS_COPY[status];
+  return (
+    <span className="status">
+      <span className={`ink-chip ink-${tone}`}>{stamp}</span>
+      <span className="status-rest">{rest}</span>
+    </span>
+  );
 }
 
 export function Countdown({ invoice }: { invoice: Invoice }) {
@@ -67,9 +73,9 @@ export function AddressLink({ address, label }: { address: string; label?: strin
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="field">
-      <span className="field-label">{label}</span>
+      <span className="label">{label}</span>
       {children}
-      {hint && <span className="field-hint">{hint}</span>}
+      {hint && <span className="hint">{hint}</span>}
     </label>
   );
 }
@@ -120,6 +126,29 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
   );
 }
 
+/** On the desk: a kraft card clipped to the blotter. Inside a sheet: a dashed box. */
 export function ConnectPrompt({ children }: { children: ReactNode }) {
-  return <div className="panel panel-muted">{children}</div>;
+  return (
+    <div className="prompt">
+      <i className="clip" aria-hidden />
+      {children}
+    </div>
+  );
+}
+
+/** Whole-page state before a document exists: loading text on the desk, or a paper note for a bad link. */
+export function DeskNote({ children, problem = false }: { children: ReactNode; problem?: boolean }) {
+  return (
+    <main className="desk-page">
+      {problem ? (
+        <div className="paper sheet tilt-l problem">
+          <i className="clip" aria-hidden />
+          <p className="label">Cannot open this link</p>
+          <p className="problem-text">{children}</p>
+        </div>
+      ) : (
+        <p className="desk-muted">{children}</p>
+      )}
+    </main>
+  );
 }

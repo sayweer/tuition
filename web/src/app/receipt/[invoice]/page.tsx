@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { isAddress, type Address } from "@solana/kit";
 import { Stamp } from "@/components/stamp";
-import { AddressLink, StatusBadge, Timeline } from "@/components/ui";
+import { AddressLink, DeskNote, StatusBadge, Timeline } from "@/components/ui";
 import { explorerAddress, mintSymbol } from "@/lib/constants";
 import { Status, formatAmount, formatTerm, formatTry, toHex, type Invoice } from "@/lib/escrow";
 import { useHistory, useInvoice, usePayeeName } from "@/lib/hooks";
@@ -40,47 +40,59 @@ export default function ReceiptPage() {
   const school = usePayeeName(invoice.data?.payee);
   const history = useHistory(id, invoice.data?.status);
 
-  if (!id) return <p className="notice notice-error">This receipt link is not valid.</p>;
-  if (invoice.isLoading) return <p className="muted">Loading the receipt…</p>;
-  if (!invoice.data) return <p className="notice notice-error">No receipt exists at this address on devnet.</p>;
+  if (!id) return <DeskNote problem>This receipt link is not valid.</DeskNote>;
+  if (invoice.isLoading) return <DeskNote>Loading the receipt…</DeskNote>;
+  if (!invoice.data) return <DeskNote problem>No receipt exists at this address on devnet.</DeskNote>;
 
   const inv = invoice.data;
   const name = school.data ?? "Registered university";
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
   const symbol = mintSymbol(inv.mint);
   const settled = inv.status >= Status.Released;
   const unset = (a: string) => a === "11111111111111111111111111111111";
 
   return (
-    <>
-      <article className="receipt">
-        <header className="receipt-head">
+    <main className="desk-page receipt-page">
+      <article className="paper rcpt">
+        <i className="clip brass" aria-hidden />
+        <header className="rcpt-head">
+          <span className="crest" aria-hidden>
+            {initials}
+          </span>
           <div>
-            <p className="muted">{settled ? "Tuition receipt" : "Tuition request in progress"}</p>
-            <h1 className="page-title" style={{ fontSize: "1.6rem" }}>
-              {name}
-            </h1>
+            <h1 className="rcpt-school">{name}</h1>
+            <p className="label rcpt-kind">
+              Finance office · {settled ? "Tuition receipt" : "Tuition request in progress"}
+            </p>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <p className="muted">Receipt number</p>
-            <p className="row-title hash">{id.slice(0, 8).toUpperCase()}</p>
+          <div className="rcpt-no">
+            <p className="label">Receipt number</p>
+            <p className="rcpt-num">{id.slice(0, 8).toUpperCase()}</p>
           </div>
         </header>
 
-        <div className="receipt-body">
+        <div className="rcpt-body">
           <div>
-            <p className="muted">{formatTerm(inv.term)} tuition</p>
-            <p className="receipt-amount">
-              {formatAmount(inv.deposited > 0n ? inv.deposited : inv.amount)} {symbol}
+            <p className="label">{formatTerm(inv.term)} tuition</p>
+            <p className="rcpt-amount">
+              {formatAmount(inv.deposited > 0n ? inv.deposited : inv.amount)}
+              <small>{symbol}</small>
             </p>
-            <p className="muted">Paid to the university&apos;s bank as {formatTry(inv.amountTryKurus)}</p>
-            <p style={{ marginTop: "0.75rem" }}>
+            <p className="rcpt-try">Paid to the university&apos;s bank as {formatTry(inv.amountTryKurus)}</p>
+            <div className="status-line">
               <StatusBadge status={inv.status} />
-            </p>
+            </div>
           </div>
           <StampFor inv={inv} school={name} />
         </div>
 
-        <dl className="receipt-grid">
+        <dl className="rcpt-grid">
           <div>
             <dt>University (payee)</dt>
             <dd>
@@ -107,11 +119,11 @@ export default function ReceiptPage() {
             <dt>Settled</dt>
             <dd>{fmtTime(inv.settledAt)}</dd>
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div className="wide">
             <dt>Student reference (salted SHA-256, no personal data on-chain)</dt>
             <dd className="hash">{toHex(inv.studentRefHash)}</dd>
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div className="wide">
             <dt>Bank transfer receipt (SHA-256 posted by the payout partner)</dt>
             <dd className="hash">
               {inv.bankReceiptHash.every((b) => b === 0) ? "Not reported" : toHex(inv.bankReceiptHash)}
@@ -119,10 +131,12 @@ export default function ReceiptPage() {
           </div>
         </dl>
 
-        <h2 className="section-title">Record</h2>
-        <Timeline invoice={inv} history={history.data} />
+        <section className="rcpt-record">
+          <h2 className="label">Record</h2>
+          <Timeline invoice={inv} history={history.data} />
+        </section>
 
-        <p className="muted" style={{ marginTop: "1.5rem", fontSize: "0.88rem" }}>
+        <p className="rcpt-foot">
           This receipt is the Solana account{" "}
           <a className="hash" href={explorerAddress(id)} target="_blank" rel="noreferrer">
             {id}
@@ -130,16 +144,16 @@ export default function ReceiptPage() {
           on devnet. Anyone can verify it without trusting this website.
         </p>
       </article>
-      <div className="actions no-print">
-        <button className="btn btn-quiet" onClick={() => window.print()}>
+      <div className="desk-actions no-print">
+        <button className="btn paperbtn" onClick={() => window.print()}>
           Print receipt
         </button>
         {inv.status === Status.Open && (
-          <a className="btn btn-quiet" href={`/pay/${id}`}>
-            Payment page
+          <a className="btn ghost" href={`/pay/${id}`}>
+            Payment page <span className="arr" aria-hidden>→</span>
           </a>
         )}
       </div>
-    </>
+    </main>
   );
 }

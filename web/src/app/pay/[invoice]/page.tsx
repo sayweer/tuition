@@ -7,7 +7,7 @@ import { isAddress, type Address } from "@solana/kit";
 import useSWR from "swr";
 import { getCreateAssociatedTokenIdempotentInstructionAsync } from "@solana-program/token-2022";
 import { getPayInvoiceInstructionAsync, getRefundInstructionAsync } from "@/generated/tuition-escrow";
-import { ConnectPrompt, Countdown, Field, StatusBadge, Timeline, TxNotice, useIsExpired } from "@/components/ui";
+import { ConnectPrompt, Countdown, DeskNote, Field, StatusBadge, Timeline, TxNotice, useIsExpired } from "@/components/ui";
 import { mintSymbol } from "@/lib/constants";
 import {
   Status,
@@ -31,39 +31,62 @@ export default function PayPage() {
   const school = usePayeeName(invoice.data?.payee);
   const history = useHistory(id, invoice.data?.status);
 
-  if (!id) return <p className="notice notice-error">This payment link is not valid.</p>;
-  if (invoice.isLoading) return <p className="muted">Loading the request…</p>;
-  if (!invoice.data) return <p className="notice notice-error">No tuition request exists at this link on devnet.</p>;
+  if (!id) return <DeskNote problem>This payment link is not valid.</DeskNote>;
+  if (invoice.isLoading) return <DeskNote>Loading the request…</DeskNote>;
+  if (!invoice.data) return <DeskNote problem>No tuition request exists at this link on devnet.</DeskNote>;
 
   const inv = invoice.data;
   const symbol = mintSymbol(inv.mint);
   return (
-    <div style={{ maxWidth: "44rem" }}>
-      <p className="muted">Tuition request from</p>
-      <h1 className="page-title">{school.data ?? "a registered university"}</h1>
-      <p className="receipt-amount" style={{ marginTop: "1.25rem" }}>
-        {formatAmount(inv.amount)} {symbol}
-      </p>
-      <p className="muted">
-        {formatTerm(inv.term)} tuition, paid to the university as {formatTry(inv.amountTryKurus)}
-      </p>
-      <p style={{ marginTop: "1rem" }}>
-        <StatusBadge status={inv.status} /> <Countdown invoice={inv} />
-      </p>
+    <main className="desk-page">
+      <div className="pay-cols">
+        <article className="paper airmail sheet letter tilt-l">
+          <i className="clip brass" aria-hidden />
+          <div className="letter-top">
+            <p className="label">Tuition request</p>
+            <span className="par-avion" aria-hidden>
+              <b>Par avion</b>
+              By airmail
+            </span>
+          </div>
+          <p className="label letter-from-label">From</p>
+          <h1 className="letter-from">{school.data ?? "A registered university"}</h1>
+          <p className="letter-to">
+            <span className="label">To</span>
+            the student&apos;s family
+          </p>
+          <div className="letter-amount">
+            <p className="big-amount">
+              {formatAmount(inv.amount)}
+              <small>{symbol}</small>
+            </p>
+            <p className="letter-sub">
+              {formatTerm(inv.term)} tuition, paid to the university as {formatTry(inv.amountTryKurus)}
+            </p>
+            <div className="status-line">
+              <StatusBadge status={inv.status} /> <Countdown invoice={inv} />
+            </div>
+          </div>
+          <VerifyStudent invoice={id} expected={inv.studentRefHash} />
+        </article>
 
-      <VerifyStudent invoice={id} expected={inv.studentRefHash} />
-
-      {inv.status === Status.Open && <LockFunds id={id} inv={inv} onDone={() => invoice.mutate()} />}
-      {inv.status === Status.Funded && <RefundIfExpired id={id} inv={inv} onDone={() => invoice.mutate()} />}
-
-      <h2 className="section-title">Progress</h2>
-      <Timeline invoice={inv} history={history.data} />
-      <p className="actions">
-        <Link className="btn btn-quiet" href={`/receipt/${id}`}>
-          Open the receipt
-        </Link>
-      </p>
-    </div>
+        <div className="pay-side">
+          {inv.status === Status.Open && <LockFunds id={id} inv={inv} onDone={() => invoice.mutate()} />}
+          {inv.status === Status.Funded && <RefundIfExpired id={id} inv={inv} onDone={() => invoice.mutate()} />}
+          <section className="paper sheet">
+            <i className="clip" aria-hidden />
+            <p className="label">Where the money is</p>
+            <h2 className="sheet-title">Progress</h2>
+            <Timeline invoice={inv} history={history.data} />
+            <div className="actions">
+              <Link className="btn ghost" href={`/receipt/${id}`}>
+                Open the receipt <span className="arr" aria-hidden>→</span>
+              </Link>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
   );
 }
 
@@ -71,11 +94,9 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
   const [ref, setRef] = useState("");
   const [result, setResult] = useState<boolean | null>(null);
   return (
-    <details className="panel" style={{ marginTop: "1.5rem" }}>
-      <summary className="row-title" style={{ cursor: "pointer" }}>
-        Check this request is for your student
-      </summary>
-      <div className="actions" style={{ alignItems: "end" }}>
+    <details className="verify">
+      <summary>Check this request is for your student</summary>
+      <div className="verify-row">
         <Field label="Student number">
           <input
             value={ref}
@@ -86,7 +107,7 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
           />
         </Field>
         <button
-          className="btn btn-quiet"
+          className="btn paperbtn"
           disabled={!ref.trim()}
           onClick={async () => setResult(toHex(await studentRefHash(invoice, ref)) === toHex(expected))}
         >
@@ -131,9 +152,11 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
   }
 
   return (
-    <section className="panel" style={{ marginTop: "1.5rem" }}>
-      <h2 className="row-title">Lock the tuition</h2>
-      <p className="muted" style={{ marginTop: "0.5rem" }}>
+    <section className="paper sheet tilt-r">
+      <i className="clip brass" aria-hidden />
+      <p className="label">Your part</p>
+      <h2 className="sheet-title">Lock the tuition</h2>
+      <p className="sheet-text">
         The money goes into escrow, not to anyone. It is released to the payout partner only after the university
         confirms the lira arrived. If that has not happened by the deadline, it comes back to you.
       </p>
@@ -141,7 +164,7 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
         <ConnectPrompt>Connect your wallet to pay.</ConnectPrompt>
       ) : (
         <>
-          <div className="form-grid" style={{ marginTop: "1rem" }}>
+          <div className="fields stacked">
             <Field label="Payout partner" hint="A licensed company that pays the university in lira.">
               <select value={chosen} onChange={(e) => setOffice(e.target.value as Address)}>
                 {offices.map((o, i) => (
@@ -152,9 +175,9 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
               </select>
             </Field>
             <Field label="Your balance">
-              <p className="row-title" style={{ padding: "0.6rem 0" }}>
+              <span className="field-value">
                 {balance.data === undefined ? "…" : `${formatAmount(balance.data)} ${symbol}`}
-              </p>
+              </span>
             </Field>
           </div>
           {short && (
@@ -174,7 +197,7 @@ function LockFunds({ id, inv, onDone }: { id: Address; inv: Invoice; onDone: () 
             </p>
           )}
           <div className="actions">
-            <button className="btn btn-primary" onClick={lock} disabled={!chosen || short || tx.status === "pending"}>
+            <button className="btn" onClick={lock} disabled={!chosen || short || tx.status === "pending"}>
               {tx.status === "pending" ? "Locking…" : `Lock ${formatAmount(inv.amount)} ${symbol}`}
             </button>
           </div>
@@ -213,14 +236,16 @@ function RefundIfExpired({ id, inv, onDone }: { id: Address; inv: Invoice; onDon
   }
 
   return (
-    <section className="panel" style={{ marginTop: "1.5rem" }}>
-      <h2 className="row-title">The deadline passed with no payout</h2>
-      <p className="muted" style={{ marginTop: "0.5rem" }}>
+    <section className="paper sheet tilt-r">
+      <i className="clip" aria-hidden />
+      <p className="label">Deadline passed</p>
+      <h2 className="sheet-title">The deadline passed with no payout</h2>
+      <p className="sheet-text">
         The payout partner never reported sending lira. Anyone can return the full amount to the family wallet.
       </p>
       {me ? (
         <div className="actions">
-          <button className="btn btn-danger" onClick={refund} disabled={tx.status === "pending"}>
+          <button className="btn danger" onClick={refund} disabled={tx.status === "pending"}>
             {tx.status === "pending" ? "Refunding…" : "Refund to the family"}
           </button>
         </div>

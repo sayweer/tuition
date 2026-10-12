@@ -25,35 +25,40 @@ export default function ArbiterPage() {
   const config = useConfig();
   const isArbiter = !!me && config.data?.arbiter === me;
   return (
-    <>
-      <h1 className="page-title">Arbiter</h1>
-      <p className="lede">
-        These requests are disputed: the payout partner reported sending lira, the university has not confirmed, and
-        the deadline has passed. Check the bank evidence off-chain, then send the escrow to one side. Funds can only go
-        to the partner or back to the family.
-      </p>
-      <div style={{ marginTop: "2rem" }}>
-        {!me ? (
-          <ConnectPrompt>Connect the arbiter wallet.</ConnectPrompt>
-        ) : !config.data ? (
-          <p className="muted">Loading…</p>
-        ) : !isArbiter ? (
-          <ConnectPrompt>This wallet ({shortAddress(me)}) is not the arbiter.</ConnectPrompt>
-        ) : (
-          <Disputes />
-        )}
-      </div>
-    </>
+    <main className="desk-page">
+      <header className="page-head">
+        <div>
+          <p className="tag">Arbiter</p>
+          <h1 className="page-title">
+            Settle the <em>disputes.</em>
+          </h1>
+          <p className="page-lede">
+            These requests are disputed: the payout partner reported sending lira, the university has not confirmed,
+            and the deadline has passed. Check the bank evidence off-chain, then send the escrow to one side. Funds can
+            only go to the partner or back to the family.
+          </p>
+        </div>
+      </header>
+      {!me ? (
+        <ConnectPrompt>Connect the arbiter wallet.</ConnectPrompt>
+      ) : !config.data ? (
+        <p className="desk-muted">Loading…</p>
+      ) : !isArbiter ? (
+        <ConnectPrompt>This wallet ({shortAddress(me)}) is not the arbiter.</ConnectPrompt>
+      ) : (
+        <Disputes />
+      )}
+    </main>
   );
 }
 
 function Disputes() {
   const { rpc } = useApp();
   const rows = useSWR("disputes", () => listInvoices(rpc, { status: Status.Paid }), { refreshInterval: 5000 });
-  if (rows.isLoading) return <p className="muted">Loading disputes…</p>;
-  if (!rows.data?.length) return <p className="muted">No open disputes.</p>;
+  if (rows.isLoading) return <p className="desk-muted">Loading disputes…</p>;
+  if (!rows.data?.length) return <p className="desk-muted">No open disputes.</p>;
   return (
-    <div className="rows">
+    <div className="slips grid">
       {rows.data.map((r) => (
         <DisputeRow key={r.address} row={r} onChange={() => rows.mutate()} />
       ))}
@@ -93,35 +98,44 @@ function DisputeRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
   }
 
   return (
-    <div className="row">
-      <div>
-        <p className="row-title">
-          {formatTry(inv.amountTryKurus)} claimed paid to {school.data ?? shortAddress(inv.payee)}
-        </p>
-        <p className="row-meta">
-          {formatTerm(inv.term)}, escrow {formatAmount(inv.deposited)} {mintSymbol(inv.mint)}
-          <br />
-          Bank receipt hash <span className="hash">{toHex(inv.bankReceiptHash).slice(0, 16)}…</span>
-        </p>
+    <article className="paper sheet slip">
+      <i className={ready ? "clip brass" : "clip"} aria-hidden />
+      <div className="slip-top">
+        <p className="label">Dispute · {formatTerm(inv.term)}</p>
+        {ready ? (
+          <span className="ink-chip ink-ok">Ready for a ruling</span>
+        ) : (
+          <span className="countdown">The university can still confirm for {opensAt - now}s</span>
+        )}
       </div>
-      <div className="row-meta">
-        {ready ? "Ready for a ruling" : `The university can still confirm for ${opensAt - now}s`}
-        <br />
+      <p className="slip-amount">{formatTry(inv.amountTryKurus)}</p>
+      <p className="slip-meta">
+        claimed paid to <b>{school.data ?? shortAddress(inv.payee)}</b>
+      </p>
+      <dl className="slip-facts">
+        <div>
+          <dt className="label">Escrow</dt>
+          <dd>
+            {formatAmount(inv.deposited)} {mintSymbol(inv.mint)}
+          </dd>
+        </div>
+        <div>
+          <dt className="label">Bank receipt hash</dt>
+          <dd className="hash">{toHex(inv.bankReceiptHash).slice(0, 16)}…</dd>
+        </div>
+      </dl>
+      <p className="slip-meta">
         <Link href={`/receipt/${row.address}`}>Full record</Link>
-      </div>
-      <div className="actions" style={{ marginTop: 0 }}>
-        <button className="btn btn-primary" disabled={!ready || tx.status === "pending"} onClick={() => rule(true)}>
+      </p>
+      <div className="actions">
+        <button className="btn" disabled={!ready || tx.status === "pending"} onClick={() => rule(true)}>
           Release to partner
         </button>
-        <button className="btn btn-danger" disabled={!ready || tx.status === "pending"} onClick={() => rule(false)}>
+        <button className="btn danger" disabled={!ready || tx.status === "pending"} onClick={() => rule(false)}>
           Return to family
         </button>
       </div>
-      {tx.status !== "idle" && (
-        <div style={{ gridColumn: "1 / -1" }}>
-          <TxNotice tx={tx} doneText="Ruling recorded." />
-        </div>
-      )}
-    </div>
+      {tx.status !== "idle" && <TxNotice tx={tx} doneText="Ruling recorded." />}
+    </article>
   );
 }
