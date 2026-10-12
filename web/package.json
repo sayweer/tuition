@@ -9,7 +9,7 @@
     "lint": "eslint",
     "codama": "node scripts/codama.mjs",
     "typecheck": "tsc --noEmit",
-    "admin": "tsx scripts/admin.ts"
+    "admin": "node --import tsx scripts/admin.ts"
   },
   "dependencies": {
     "@fontsource-variable/public-sans": "^5.3.0",
