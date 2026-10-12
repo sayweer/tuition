@@ -42,9 +42,13 @@ const RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana
 const rpc = createSolanaRpc(devnet(RPC));
 const rpcSubscriptions = createSolanaRpcSubscriptions(devnet(RPC.replace(/^http/, "ws")));
 const keypairPath = process.env.SOLANA_KEYPAIR ?? `${homedir()}/.config/solana/tuition-devnet.json`;
-// Loaded only by commands that sign; `status` never touches the key.
+// Loaded once, and only by commands that sign; `status` never touches the key.
+// Kit rejects two signer instances for one address, so every caller shares this one.
+let adminSigner: ReturnType<typeof createKeyPairSignerFromBytes> | undefined;
 const loadAdmin = () =>
-  createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(keypairPath, "utf8"))));
+  (adminSigner ??= createKeyPairSignerFromBytes(
+    new Uint8Array(JSON.parse(readFileSync(keypairPath, "utf8"))),
+  ));
 const MOCK_MINT = MINTS[1].address;
 
 async function send(ixs: Instruction[]): Promise<string> {
