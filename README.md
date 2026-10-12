@@ -1,4 +1,4 @@
-# ThirdPay Tuition
+# Tuition
 
 A family abroad locks a Turkish university's tuition in USDG on Solana. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the student and the university can each check on their own.
 

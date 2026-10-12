@@ -1,6 +1,6 @@
 import { address, type Address } from "@solana/kit";
 
-export const APP_NAME = "ThirdPay Tuition";
+export const APP_NAME = "Tuition";
 
 export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
