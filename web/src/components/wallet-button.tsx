@@ -21,25 +21,25 @@ function Picker() {
 
   if (connected) {
     return (
-      <button className="btn btn-quiet" onClick={() => disconnect()} title="Disconnect">
-        <span className="dot" aria-hidden /> {shortAddress(connected.account.address)}
+      <button className="cta" onClick={() => disconnect()} title="Disconnect">
+        ● {shortAddress(connected.account.address)}
       </button>
     );
   }
   if (wallets.length === 0) {
     return (
-      <a className="btn btn-quiet" href="https://phantom.com/download" target="_blank" rel="noreferrer">
-        Install Phantom or Solflare
+      <a className="cta" href="https://phantom.com/download" target="_blank" rel="noreferrer">
+        Install Phantom
       </a>
     );
   }
   return (
-    <div className="relative">
-      <button className="btn btn-primary" onClick={() => setOpen((o) => !o)} disabled={isRunning}>
+    <>
+      <button className="cta" onClick={() => setOpen((o) => !o)} disabled={isRunning} aria-expanded={open}>
         {isRunning ? "Connecting…" : "Connect wallet"}
       </button>
       {open && (
-        <ul className="menu" role="menu">
+        <ul className="wallet-menu" role="menu">
           {wallets.map((w) => (
             <li key={w.name}>
               <button
@@ -56,7 +56,7 @@ function Picker() {
           ))}
         </ul>
       )}
-    </div>
+    </>
   );
 }
 
@@ -68,9 +68,10 @@ export function WalletButton() {
     () => true,
     () => false,
   );
-  if (!mounted) return <span className="btn btn-quiet">Loading wallets…</span>;
+  const placeholder = <span className="cta" style={{ padding: "9px 12px", fontSize: 12 }}>Loading wallets…</span>;
+  if (!mounted) return placeholder;
   return (
-    <WalletReadyGate client={client} fallback={<span className="btn btn-quiet">Loading wallets…</span>}>
+    <WalletReadyGate client={client} fallback={placeholder}>
       <Picker />
     </WalletReadyGate>
   );

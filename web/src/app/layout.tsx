@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import "@fontsource-variable/public-sans";
 import { SiteHeader } from "@/components/site-header";
 import { APP_NAME } from "@/lib/constants";
 import { Providers } from "./providers";
@@ -14,12 +13,28 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,700,500&f[]=satoshi@400,500,700&f[]=gambarino@400&display=swap"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* Root layout of the App Router: the font loads on every page (the rule targets pages/_document). */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+        />
+      </head>
+      <body className="desk">
         <Providers>
           <SiteHeader />
-          <main className="shell main">{children}</main>
-          <footer className="shell site-footer">
-            Solana devnet demo. Test tokens only; no real lira moves on-chain.
+          {children}
+          <footer className="site-foot">
+            <span>Solana devnet · test tokens only · no real lira moves on-chain</span>
+            <span>{APP_NAME}</span>
           </footer>
         </Providers>
       </body>
