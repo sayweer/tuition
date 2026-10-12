@@ -196,7 +196,8 @@ export function initLanding(root: HTMLElement): () => void {
         this.lx = null;
         return;
       }
-      const p = rHold.pointAt(0.5);
+      // the route runs partner → arbiter; hang the tag near the partner end so it never covers the arbiter's note
+      const p = rHold.pointAt(0.25);
       const ax = this.lx == null ? 0 : clamp(p.x - this.lx, -5, 5);
       this.lx = p.x;
       this.va += -this.a * 0.07 - this.va * 0.06 - ax * 0.8;
@@ -381,6 +382,10 @@ export function initLanding(root: HTMLElement): () => void {
     }
   };
 
+  /** Each scrubbed scene and the progress at which its story is fully on the desk: where an
+   *  in-page link (Why / How / Rules) should land instead of the scene's still-empty start. */
+  const views: Record<string, { tl: gsap.core.Timeline; at: () => number }> = {};
+
   const pinned = (trigger: HTMLElement, len: string, on: boolean) =>
     on
       ? { trigger, start: "top top", end: `+=${len}`, pin: true, scrub: 0.9, invalidateOnRefresh: true }
@@ -408,6 +413,8 @@ export function initLanding(root: HTMLElement): () => void {
       .to(q("#stB"), { y: 900, x: 170, rotation: 44, duration: 0.9, ease: LEAVE }, "tear+=.22")
       .to(q("#stC"), { y: 760, x: 110, rotation: -30, duration: 0.9, ease: LEAVE }, "tear+=.3")
       .to({}, { duration: 0.5 });
+    // land just before the slip tears: every complaint is pinned up, the problem is visible
+    views.but = { tl, at: () => (tl.labels.tear - 0.15) / tl.duration() };
   };
 
   const buildSo = (pin: boolean) => {
@@ -457,6 +464,8 @@ export function initLanding(root: HTMLElement): () => void {
       .add(step(4), "<")
       .to(q("#sPayout"), { boxShadow: "0 0 0 3px #ffe08a, 0 0 40px 8px rgba(255,214,110,.6), 0 14px 28px -8px rgba(5,10,20,.6)", duration: 0.3, ease: LAND }, "<.2")
       .to({}, { duration: 0.9 });
+    // land in the closing hold: stamped, released, all four steps lit
+    views.so = { tl, at: () => (tl.duration() - 0.5) / tl.duration() };
   };
 
   const buildRules = (pin: boolean) => {
@@ -483,6 +492,8 @@ export function initLanding(root: HTMLElement): () => void {
       .add(drop(q("#receipt"), { y: 260, rot: 6 }), "+=.1")
       .add(value(0, totalChars, 1.6, "none", typeTo), ">-.1")
       .to({}, { duration: 0.8 });
+    // land once the log has typed out: refund, freeze and ruling all on the desk
+    views.rules = { tl, at: () => (tl.duration() - 0.4) / tl.duration() };
   };
 
   const buildClose = () => {
@@ -523,7 +534,40 @@ export function initLanding(root: HTMLElement): () => void {
   };
   window.addEventListener("load", refresh);
   cleanups.push(() => window.removeEventListener("load", refresh));
-  void document.fonts?.ready.then(refresh);
+
+  /** Scroll position that shows a scene fully built; plain sections (and every scene on small
+   *  screens, where nothing is pinned) just scroll to their top. */
+  const scrollTargetFor = (id: string): number | null => {
+    const v = views[id];
+    const st = v?.tl.scrollTrigger;
+    if (v && st && st.vars.pin) return st.start + (st.end - st.start) * clamp(v.at(), 0, 1);
+    const el = root.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    return el ? el.getBoundingClientRect().top + window.scrollY : null;
+  };
+  // In-page links live in the header and in the hero, so listen on the whole document.
+  const onAnchorClick = (e: MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = (e.target as Element | null)?.closest?.('a[href^="#"]');
+    const id = a?.getAttribute("href")?.slice(1);
+    const y = id ? scrollTargetFor(id) : null;
+    if (y == null) return;
+    e.preventDefault();
+    window.scrollTo({ top: y, behavior: REDUCED ? "auto" : "smooth" });
+    history.replaceState(null, "", `#${id}`);
+  };
+  document.addEventListener("click", onAnchorClick);
+  cleanups.push(() => document.removeEventListener("click", onAnchorClick));
+  // arriving with /#so (a shared link) lands on the built scene too
+  const jumpToHash = () => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    const y = id && alive ? scrollTargetFor(id) : null;
+    if (y != null) window.scrollTo(0, y);
+  };
+
+  void document.fonts?.ready.then(() => {
+    refresh();
+    jumpToHash();
+  });
   requestAnimationFrame(refresh);
 
   return () => {

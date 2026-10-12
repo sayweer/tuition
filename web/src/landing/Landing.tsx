@@ -101,7 +101,7 @@ function Desk() {
           <div className="doc paper sticky" id="stA" style={at("8vw", "14vh", "-6deg")}>
             <i className="clip" /><p className="note">{L.but.note1}</p><span className="sig">— {L.but.sig1}</span>
           </div>
-          <div className="doc paper sticky pink" id="stB" style={at("67vw", "9vh", "5deg")}>
+          <div className="doc paper sticky pink" id="stB" style={at("66vw", "15vh", "5deg")}>
             <i className="clip" /><p className="note">{L.but.note2}</p><span className="sig">— {L.but.sig2}</span>
           </div>
           <div className="doc paper sticky blue" id="stC" style={at("72vw", "44vh", "-3deg")}>
@@ -195,12 +195,12 @@ function Desk() {
             <div className="amount"><span className="odo" id="refundAmt">0</span> USDG <span className="chip">{L.rules.refundTo}</span></div>
             <i className="rstamp blue" id="rRefund">{L.rules.refunded}</i>
           </div>
-          <div className="doc paper kraft sender" id="rPartner" style={at("81vw", "44vh", "4deg")}>
+          <div className="doc paper kraft sender" id="rPartner" style={at("82vw", "50vh", "4deg")}>
             <i className="clip" />
             <span className="label">{L.rules.caseB}</span>
             <p className="note">{L.rules.partnerSays}</p>
           </div>
-          <div className="doc paper agent" id="rArbiter" style={at("44vw", "12vh", "2deg")}>
+          <div className="doc paper agent" id="rArbiter" style={at("50vw", "12vh", "2deg")}>
             <i className="clip brass" />
             <span className="label">{L.rules.arbiter}</span>
             <p className="note" style={{ marginTop: 8 }}>{L.rules.arbiterNote}</p>
