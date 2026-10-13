@@ -83,7 +83,7 @@ web/scripts/admin.ts       devnet admin tasks (config, university registry, pool
 | `resolve(to_office)` | arbiter | `Paid`, deadline passed and review window over: pays the partner, or releases the contributions |
 | `settle_contribution` | anyone | After a failure: sends one contribution to its giver's account or to the pool vault, once |
 
-**Safety properties, each covered by a LiteSVM test (19 tests):**
+**Safety properties, each covered by a LiteSVM test (20 tests):**
 - Every instruction rejects the wrong signer.
 - Final states (`Released`, `Refunded`, `Resolved`, `Expired`) are terminal: no double payment, no double release.
 - `refund` and `expire` are rejected before their deadlines; `refund` is rejected once the partner has claimed payout.
@@ -92,7 +92,7 @@ web/scripts/admin.ts       devnet admin tasks (config, university registry, pool
 - Only allowed mints are accepted. The university and its partner cannot contribute to their own request.
 - **Token-2022:**
   - classic SPL and Token-2022 both work through `token_interface`;
-  - with a transfer fee, the vault books what actually arrived, not what was sent (a fee-bearing mint still cannot fully fund a request; see Known limits);
+  - with a transfer fee, the vault books what actually arrived, and the cap on a contribution applies to that amount: the app sends just enough extra for the net to close the gap, so a fee-bearing request still reaches `Funded`;
   - mints with an active transfer hook are refused at creation and at payment.
 - A partial clawback by the issuer's permanent delegate pays out the remainder instead of locking the vault.
 
@@ -102,7 +102,7 @@ Tested with Anchor 1.1.2, Solana CLI 4.1.1, Rust 1.98 and Node 22+.
 
 ```bash
 anchor build                        # program, IDL, TS types
-cargo test -p tuition_escrow        # 19 LiteSVM tests (needs target/deploy/tuition_escrow.so)
+cargo test -p tuition_escrow        # 20 LiteSVM tests (needs target/deploy/tuition_escrow.so)
 ```
 
 ### Web app
@@ -154,11 +154,11 @@ The script signs with `~/.config/solana/tuition-devnet.json`. Set `SOLANA_KEYPAI
 - **Pool trust.** The scholarship committee (the arbiter key) decides where pool money goes. Pool gifts are not refundable to donors.
 - **Settlement is a crank.** After a failure, money moves only when someone calls `settle_contribution`. Anyone can, and the app offers a button for it; the destination is fixed by the contribution itself.
 - **No cancellation.** An unfunded invoice cannot be cancelled, and accounts are never closed: the receipt is kept on purpose.
-- **Transfer-fee mints cannot reach `Funded`.** `contribute` and `allocate` check the gross amount sent against what is missing, but book only what arrives after the fee. With any non-zero fee, `raised` always stays short of `amount`, so the request can only expire. The fee is zero on both configured mints today.
 - **Issuer risk (USDG).**
   - Paxos holds the permanent delegate, freeze, transfer-fee and transfer-hook authorities on the USDG mint. It can move or freeze tokens in the vault.
   - Enabling a hook after funding blocks payouts until Paxos disables it.
-  - Enabling a non-zero fee stops new and still-collecting requests from reaching `Funded` (see above).
+  - A non-zero fee means givers pay slightly more than what reaches escrow, and a contribution that goes back loses the fee again.
+  - The payout also pays the fee on its way out, so the partner receives the raised amount minus that fee.
   - After a partial clawback from a failed request's vault, `settle_contribution` pays contributions in full in the order they are settled, so the last ones settled absorb the shortfall.
 - **CPI Guard.** A payer whose Token-2022 account has CPI Guard enabled cannot pay through the program; use a regular account.
 
