@@ -33,6 +33,8 @@ type Copy = Record<
   | "invalid"
   | "loading"
   | "notFound"
+  | "rpcDown"
+  | "retry"
   | "tuitionRequest"
   | "byAirmail"
   | "from"
@@ -54,6 +56,7 @@ type Copy = Record<
   | "lockText"
   | "shareText"
   | "connectPay"
+  | "ownRequest"
   | "amount"
   | "amountHint"
   | "badAmount"
@@ -76,6 +79,8 @@ const T: Dict<Copy> = {
     invalid: "This payment link is not valid.",
     loading: "Loading the request…",
     notFound: "No tuition request exists at this link on devnet.",
+    rpcDown: "Could not reach devnet. Retrying…",
+    retry: "Try again",
     tuitionRequest: "Tuition request",
     byAirmail: "By airmail",
     from: "From",
@@ -100,6 +105,8 @@ const T: Dict<Copy> = {
     shareText:
       "You can pay all of it or only a part. Relatives or a sponsor can add the rest with this same link.",
     connectPay: "Connect your wallet to pay.",
+    ownRequest:
+      "The university and its payout partner cannot contribute to their own request. Send this link to the family.",
     amount: "Amount",
     amountHint: "Up to what is still missing.",
     badAmount: "Enter an amount above zero.",
@@ -117,6 +124,8 @@ const T: Dict<Copy> = {
     invalid: "Bu ödeme bağlantısı geçerli değil.",
     loading: "Talep yükleniyor…",
     notFound: "Devnet'te bu bağlantıya ait bir harç talebi yok.",
+    rpcDown: "Devnet'e ulaşılamadı. Yeniden deneniyor…",
+    retry: "Tekrar dene",
     tuitionRequest: "Harç talebi",
     byAirmail: "Uçak ile",
     from: "Gönderen",
@@ -141,6 +150,7 @@ const T: Dict<Copy> = {
     shareText:
       "Tamamını ya da bir kısmını ödeyebilirsiniz. Kalanı akrabalarınız ya da bir destekçi aynı bağlantıyla tamamlayabilir.",
     connectPay: "Ödemek için cüzdanınızı bağlayın.",
+    ownRequest: "Üniversite ve ödeme ortağı kendi taleplerine katkı yapamaz. Bu bağlantıyı aileye gönderin.",
     amount: "Tutar",
     amountHint: "En fazla eksik kalan kadar.",
     badAmount: "Sıfırdan büyük bir tutar girin.",
@@ -169,6 +179,16 @@ export default function PayPage() {
   const t = T[lang];
 
   if (!id) return <DeskNote problem>{t.invalid}</DeskNote>;
+  // a failed fetch is not a missing account: SWR keeps retrying, so say so instead of "not found"
+  if (invoice.error && !invoice.data)
+    return (
+      <DeskNote problem>
+        {t.rpcDown}{" "}
+        <button className="btn paperbtn" onClick={() => invoice.mutate()}>
+          {t.retry}
+        </button>
+      </DeskNote>
+    );
   if (invoice.isLoading) return <DeskNote>{t.loading}</DeskNote>;
   if (!invoice.data) return <DeskNote problem>{t.notFound}</DeskNote>;
 
@@ -201,8 +221,8 @@ export default function PayPage() {
               {t.letterSub(formatTerm(inv.term, lang), formatTry(inv.amountTryKurus, lang))}
             </p>
             <div className="status-line">
-              <StatusBadge status={inv.status} />{" "}
-              {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
+              <StatusBadge status={inv.status} invoice={inv} />{" "}
+              {inv.status === Status.Funded && <Countdown invoice={inv} />}
             </div>
             <FundingBar inv={inv} />
           </div>
@@ -284,12 +304,14 @@ function Contribute({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx
   const t = T[lang];
   const missing = remainingOf(inv);
   const [text, setText] = useState("");
-  const balance = useSWR(me ? ["balance", me, inv.mint, tx.status] : null, () =>
+  // the program rejects contributions from the request's own university or partner (6008)
+  const own = me === inv.payee || me === inv.office;
+  const balance = useSWR(me && !own ? ["balance", me, inv.mint, tx.status] : null, () =>
     tokenBalance(client.rpc, me as Address, inv.mint),
   );
   const symbol = mintSymbol(inv.mint);
   // empty field means "all that is missing"; it follows the target as others contribute
-  const amount = text.trim() ? parseAmount(text) : missing;
+  const amount = text.trim() ? parseAmount(text, lang) : missing;
   const invalid = amount === null || amount <= 0n;
   const over = !invalid && amount > missing;
   const short = !invalid && balance.data !== undefined && balance.data < amount;
@@ -315,6 +337,8 @@ function Contribute({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx
       <p className="sheet-text">{t.shareText}</p>
       {!me ? (
         <ConnectPrompt>{t.connectPay}</ConnectPrompt>
+      ) : own ? (
+        <p className="notice">{t.ownRequest}</p>
       ) : (
         <>
           <div className="fields stacked">

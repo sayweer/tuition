@@ -20,6 +20,7 @@ import {
   formatAmount,
   formatTerm,
   formatTry,
+  isExpired,
   listInvoices,
   parseAmount,
   shortAddress,
@@ -29,7 +30,7 @@ import {
   tokenProgramOf,
   type InvoiceRow,
 } from "@/lib/escrow";
-import { useApp, useConfig, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, useNow, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Copy = Record<
@@ -68,6 +69,9 @@ type Copy = Record<
   | "openPayment"
   | "request"
   | "notReported"
+  | "collectMissed"
+  | "payoutMissed"
+  | "closeRequest"
   | "confirming"
   | "confirm"
   | "paymentPage"
@@ -108,7 +112,7 @@ const T: Dict<Copy> = {
     payoutWindow: "Payout window",
     windowHint: "Starts once the full amount is in escrow.",
     fundingWindow: "Collecting period",
-    fundingHint: "If the amount is not raised by then, every contribution goes back.",
+    fundingHint: "If the amount is not raised by then, each contribution goes back to its giver or to the scholarship pool, as they chose.",
     partner: "Payout partner",
     partnerHint: "The licensed company that pays you in lira.",
     partnerOption: (n, addr) => `Licensed partner ${n} (${addr})`,
@@ -121,6 +125,11 @@ const T: Dict<Copy> = {
     openPayment: "Open payment page",
     request: "request",
     notReported: "The partner has not reported the lira yet. Confirm only if it reached your bank.",
+    collectMissed:
+      "The collecting period ended before the full amount came in. Close the request on its payment page so each contribution can settle.",
+    payoutMissed:
+      "The payout partner missed the payout deadline. If the lira did not reach your bank, close the request on its payment page so each contribution can settle.",
+    closeRequest: "Close request",
     confirming: "Confirming…",
     confirm: "Confirm lira received",
     paymentPage: "Payment page",
@@ -154,7 +163,7 @@ const T: Dict<Copy> = {
     payoutWindow: "Ödeme süresi",
     windowHint: "Tutarın tamamı emanete girdiğinde başlar.",
     fundingWindow: "Toplama süresi",
-    fundingHint: "Tutar bu süre içinde toplanmazsa tüm katkılar geri döner.",
+    fundingHint: "Tutar bu süre içinde toplanmazsa her katkı, sahibinin seçimine göre kendisine ya da burs havuzuna döner.",
     partner: "Ödeme ortağı",
     partnerHint: "Size lira olarak ödeme yapan lisanslı şirket.",
     partnerOption: (n, addr) => `Lisanslı ödeme ortağı ${n} (${addr})`,
@@ -167,6 +176,11 @@ const T: Dict<Copy> = {
     openPayment: "Ödeme sayfasını aç",
     request: "talep",
     notReported: "Ödeme ortağı lirayı gönderdiğini henüz bildirmedi. Yalnızca bankanıza ulaştıysa onaylayın.",
+    collectMissed:
+      "Toplama süresi, tutarın tamamı toplanmadan doldu. Her katkının sahibine ya da burs havuzuna dönebilmesi için talebi ödeme sayfasından kapatın.",
+    payoutMissed:
+      "Ödeme ortağı ödeme süresini kaçırdı. Lira bankanıza ulaşmadıysa, her katkının sahibine ya da burs havuzuna dönebilmesi için talebi ödeme sayfasından kapatın.",
+    closeRequest: "Talebi kapat",
     confirming: "Onaylanıyor…",
     confirm: "Liranın geldiğini onayla",
     paymentPage: "Ödeme sayfası",
@@ -270,8 +284,8 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   const chosenOffice = office || offices[0] || "";
   const [created, setCreated] = useState<{ invoice: Address; salt: string } | null>(null);
 
-  const amountBase = parseAmount(amount);
-  const tryKurus = parseAmount(tryAmount, 2);
+  const amountBase = parseAmount(amount, lang);
+  const tryKurus = parseAmount(tryAmount, lang, 2);
   const valid =
     !!amountBase && amountBase > 0n && tryKurus !== null && studentRef.trim().length > 0 && chosenOffice !== "";
 
@@ -415,8 +429,13 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
   const tx = useSendTx();
   const lang = useLang();
   const t = T[lang];
+  const now = useNow();
   const inv = row.data;
   const canConfirm = inv.status === Status.Funded || inv.status === Status.Paid;
+  // the same conditions under which the payment page offers CloseFailed (expire / refund)
+  const collectMissed = inv.status === Status.Open && BigInt(now) >= inv.fundingDeadline;
+  const payoutMissed = inv.status === Status.Funded && isExpired(inv, now);
+  const toPayPage = inv.status === Status.Open || payoutMissed;
 
   async function confirm() {
     const sig = await tx.send(async () => {
@@ -454,11 +473,13 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
         {t.liraQuote} {formatTry(inv.amountTryKurus, lang)}
       </p>
       <div className="status-line">
-        <StatusBadge status={inv.status} />
-        {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
+        <StatusBadge status={inv.status} invoice={inv} />
+        {inv.status === Status.Funded && <Countdown invoice={inv} />}
       </div>
       {inv.status === Status.Open && <FundingBar inv={inv} />}
-      {inv.status === Status.Funded && (
+      {collectMissed && <p className="slip-note">{t.collectMissed}</p>}
+      {payoutMissed && <p className="slip-note">{t.payoutMissed}</p>}
+      {inv.status === Status.Funded && !payoutMissed && (
         <p className="slip-note">{t.notReported}</p>
       )}
       <div className="actions">
@@ -467,8 +488,9 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
             {tx.status === "pending" ? t.confirming : t.confirm}
           </button>
         )}
-        <Link className="btn ghost" href={inv.status === Status.Open ? payLink(row.address) : `/receipt/${row.address}`}>
-          {inv.status === Status.Open ? t.paymentPage : t.receipt} <span className="arr" aria-hidden>→</span>
+        <Link className="btn ghost" href={toPayPage ? payLink(row.address) : `/receipt/${row.address}`}>
+          {collectMissed || payoutMissed ? t.closeRequest : toPayPage ? t.paymentPage : t.receipt}{" "}
+          <span className="arr" aria-hidden>→</span>
         </Link>
       </div>
       {tx.status !== "idle" && <TxNotice tx={tx} doneText={t.confirmed} />}
