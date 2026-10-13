@@ -105,7 +105,8 @@ const en = {
     label: "Registration day · tuition received · receipt sealed",
     title: "Paid in lira. Signed by the university.",
     body:
-      "Issue a request, send the family the link, and confirm when the lira lands. Escrow and the on-chain receipt take care of the rest.",
+      "Issue a request, send the family the link, and confirm when the lira lands. Relatives and donors can fill what the family cannot, and a scholarship pool covers the gaps. Escrow and the on-chain receipt take care of the rest.",
+    give: "Fund a student",
     program: "See the program on Solana",
   },
 };
@@ -212,7 +213,8 @@ const tr: typeof en = {
     label: "Kayıt günü · harç tahsil edildi · makbuz mühürlendi",
     title: "Lira ile ödendi. Üniversite imzaladı.",
     body:
-      "Talebi oluşturun, linki aileye gönderin, lira hesabınıza geçince onaylayın. Gerisini emanet hesabı ve zincirdeki makbuz halleder.",
+      "Talebi oluşturun, linki aileye gönderin, lira hesabınıza geçince onaylayın. Ailenin yetişemediği kısmı akrabalar ve bağışçılar tamamlar, burs havuzu da eksikleri kapatır. Gerisini emanet hesabı ve zincirdeki makbuz halleder.",
+    give: "Bir öğrenciye destek ol",
     program: "Programı Solana'da gör",
   },
 };

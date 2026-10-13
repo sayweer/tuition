@@ -236,6 +236,7 @@ function Desk() {
           <p>{L.close.body}</p>
           <div className="btnrow">
             <Link className="btn" href="/school">{L.hero.start} <span className="arr">→</span></Link>
+            <Link className="btn ghost" href="/give">{L.close.give} <span className="arr">→</span></Link>
             <a className="btn ghost" href={explorerAddress(PROGRAM)} target="_blank" rel="noreferrer">
               {L.close.program} <span className="arr">↗</span>
             </a>

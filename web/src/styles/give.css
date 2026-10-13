@@ -1,0 +1,676 @@
+/* /give: the donor page. Builds on desk.css tokens and the .desk-page primitives in globals.css.
+   Every rule is scoped under .give. */
+
+.give .give-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.give [tabindex="-1"]:focus {
+  outline: none;
+}
+.give #give-step-heading,
+.give #give-cart {
+  scroll-margin-top: 110px;
+}
+.give .give-fine {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+.give .give-warn {
+  color: var(--red);
+}
+.give .give-mono {
+  font-family: var(--f-mono);
+}
+
+/* ------------------------------------------------ steps + tabs (on the desk) */
+.give .give-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(243, 236, 223, 0.84);
+}
+.give .give-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.give .give-steps li + li::before {
+  content: "";
+  width: 28px;
+  border-top: 1.5px dashed rgba(243, 236, 223, 0.45);
+}
+.give .give-steps li.now {
+  color: var(--paper);
+}
+.give .give-step-n {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(243, 236, 223, 0.6);
+  font-size: 12px;
+}
+.give .give-steps li.now .give-step-n {
+  color: var(--ink);
+  background: var(--glow);
+  border: 1.5px solid var(--glow);
+}
+.give .give-steps li.done .give-step-n {
+  color: var(--ink);
+  background: var(--paper);
+  border: 1.5px solid var(--paper);
+}
+
+.give .give-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 26px;
+  border-bottom: 2px solid rgba(243, 236, 223, 0.3);
+}
+.give .give-tabs [role="tab"] {
+  flex: 0 1 auto;
+  min-height: 46px;
+  margin-bottom: -2px;
+  padding: 12px 18px 10px;
+  font-family: var(--f-mono);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--paper);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+  transition: background-color 0.2s var(--e-land);
+}
+.give .give-tabs [role="tab"]:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.give .give-tabs [role="tab"][aria-selected="true"] {
+  color: var(--ink);
+  background: var(--paper) var(--paper-grain);
+  border-bottom-color: var(--paper);
+}
+
+/* ------------------------------------------------------ fund: list + cart */
+.give .give-fund {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 23rem);
+  gap: 44px;
+  align-items: start;
+}
+.give .give-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+.give .give-h2 {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: clamp(26px, 3.6vw, 34px);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--paper);
+}
+.give .give-list > .desk-muted {
+  margin-top: 28px;
+}
+
+/* add by tuition link: a paper strip */
+.give .give-link {
+  margin-top: 22px;
+  padding: 18px 18px 16px;
+}
+.give .give-link-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.give .give-link-row input,
+.give .give-amount-input input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 10px 10px 8px;
+  font-family: var(--f-mono);
+  font-size: 16px;
+  color: var(--ink);
+  background-color: rgba(255, 255, 255, 0.5);
+  border: 0;
+  border-bottom: 1.5px solid var(--ink);
+  border-radius: 2px 2px 0 0;
+  transition: background-color 0.2s var(--e-land);
+}
+.give .give-link-row input::placeholder,
+.give .give-amount-input input::placeholder {
+  color: rgba(74, 66, 57, 0.75);
+}
+.give .give-link-row input:hover,
+.give .give-amount-input input:hover {
+  background-color: rgba(255, 255, 255, 0.72);
+}
+.give .give-link-row input:focus-visible,
+.give .give-amount-input input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  background-color: #fffdf8;
+  border-bottom-color: var(--blue);
+}
+.give .give-link-row input[aria-invalid="true"],
+.give .give-amount-input input[aria-invalid="true"] {
+  border-bottom-color: var(--red);
+}
+.give .give-link-row .btn {
+  flex: none;
+}
+.give .give-link-msg {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.give .give-link-msg:empty {
+  margin: 0;
+}
+.give .give-link-msg.err {
+  color: var(--red);
+}
+.give .give-link-msg.ok {
+  color: var(--ok);
+}
+.give .give-link-msg.busy {
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+/* request cards */
+.give .give-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 34px 26px;
+  margin-top: 34px;
+}
+.give .give-card {
+  cursor: pointer;
+}
+.give .give-card.is-picked {
+  box-shadow: var(--rest), inset 0 0 0 2px var(--ok);
+}
+.give .give-uni {
+  margin-top: 8px;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+.give .give-progress {
+  height: 10px;
+  margin-top: 16px;
+  overflow: hidden;
+  background: rgba(29, 26, 22, 0.08);
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(29, 26, 22, 0.25);
+}
+.give .give-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.give .give-raised {
+  margin-top: 8px;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.give .give-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(29, 26, 22, 0.3);
+}
+.give .give-card-facts p {
+  display: grid;
+  gap: 2px;
+}
+.give .give-missing,
+.give .give-line-amount {
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.give .give-missing small,
+.give .give-line-amount small,
+.give .give-totals small,
+.give .give-pool-facts small,
+.give .give-pool-now small,
+.give .give-done-amount small {
+  margin-left: 0.3em;
+  font-size: 0.6em;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.give .countdown.give-soon {
+  color: var(--red);
+}
+.give .give-card .actions {
+  margin-top: 18px;
+}
+.give .give-empty {
+  max-width: 40rem;
+  margin-top: 34px;
+}
+
+/* mobile only: a tab back down to the list, sticky while the cards scroll */
+.give .give-jump {
+  display: none;
+}
+
+/* the "To give" list */
+.give .give-cart-wrap {
+  position: sticky;
+  top: 96px;
+}
+.give .give-cart {
+  --r: 0deg;
+  padding: 28px 22px 22px;
+}
+.desk-page.give .give-cart:hover,
+.desk-page.give .give-doc:hover {
+  transform: rotate(var(--r));
+  box-shadow: var(--rest);
+}
+.give .give-count {
+  font-family: var(--f-mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+}
+.give .give-cart-empty {
+  margin-top: 14px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.give .give-cart-items {
+  display: grid;
+  max-height: min(52vh, 34rem);
+  margin: 14px -6px 0 -4px;
+  padding: 4px 6px 4px 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.give .give-item {
+  padding: 14px 0;
+  border-bottom: 1px dashed rgba(29, 26, 22, 0.3);
+}
+.give .give-item:first-child {
+  border-top: 1px dashed rgba(29, 26, 22, 0.3);
+}
+.give .give-in {
+  animation: give-slide-in 0.34s var(--e-land);
+}
+@keyframes give-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+.give .give-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.give .give-item-name {
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.give .give-item-meta {
+  margin-top: 2px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.give .give-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid rgba(29, 26, 22, 0.35);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.15s var(--e-land), border-color 0.15s var(--e-land);
+}
+.give .give-x:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+.give .give-amount-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.give .give-amount-input {
+  position: relative;
+  display: block;
+}
+.give .give-amount-input input {
+  padding-right: 64px;
+}
+.give .give-unit {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+.give .give-item-msg {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+.give .give-item-msg.give-warn {
+  color: var(--red);
+}
+.give .give-link-btn {
+  min-height: 32px;
+  padding: 4px 0;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.give .give-link-btn:hover {
+  color: var(--red);
+}
+
+.give .give-totals {
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1.5px solid var(--ink);
+}
+.give .give-totals div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.give .give-totals dd {
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.give .give-choice {
+  margin-top: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1.5px dashed rgba(29, 26, 22, 0.35);
+}
+.give .give-check {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.give .give-check input {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.give .give-choice .give-fine {
+  padding-left: 32px;
+}
+.give .give-cart .actions {
+  margin-top: 20px;
+}
+.give .give-wide {
+  width: 100%;
+  justify-content: center;
+}
+.give .actions > .give-fine {
+  flex-basis: 100%;
+  margin-top: 0;
+}
+
+/* --------------------------------------------- review + done: the document */
+.give .give-doc,
+.give .give-pool {
+  max-width: 46rem;
+}
+.give .give-doc {
+  --r: 0deg;
+  padding: clamp(28px, 4vw, 44px) clamp(20px, 4vw, 40px) 30px;
+}
+.give .give-doc-head {
+  padding-bottom: 16px;
+  border-bottom: 4px double var(--ink);
+}
+.give .give-line {
+  padding: 14px 0;
+  border-bottom: 1px dashed rgba(29, 26, 22, 0.3);
+}
+.give .give-line-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 18px;
+}
+.give .give-line-amount {
+  white-space: nowrap;
+}
+.give .give-doc .give-totals {
+  border-top: 0;
+  padding-top: 4px;
+}
+.give .give-doc-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 20px 28px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(29, 26, 22, 0.25);
+}
+.give .give-doc-notes .notice {
+  margin-top: 8px;
+}
+.give .give-doc-strong {
+  margin-top: 6px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.give .give-progress-text {
+  margin-top: 18px;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.give .give-prompts {
+  margin-top: 22px;
+  padding-left: 10px;
+  border-left: 2px solid var(--amber);
+}
+.give .give-prompts + .actions {
+  margin-top: 14px;
+}
+
+.give .give-st {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+.give .give-st-wait {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.give .give-st-sign {
+  font-weight: 700;
+  color: var(--amber-ink);
+}
+.give .give-st-err p {
+  flex: 1 1 16rem;
+  color: var(--red);
+}
+.give .btn.give-small {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.give .give-done-title {
+  font-size: clamp(30px, 5vw, 44px);
+}
+.give .give-done .give-totals {
+  margin-top: 20px;
+}
+.give .give-done-amount {
+  margin-top: 18px;
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ pool tab */
+.give .give-pool-stats {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed rgba(29, 26, 22, 0.3);
+}
+.give .give-pool-now {
+  display: grid;
+  gap: 2px;
+}
+.give .give-pool-now b {
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: clamp(28px, 5vw, 36px);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.give .give-pool-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 12px 20px;
+  margin-top: 14px;
+}
+.give .give-pool-facts dd {
+  margin-top: 3px;
+  font-family: var(--f-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- small */
+@media (max-width: 980px) {
+  .give .give-fund {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .give .give-cart-wrap {
+    position: static;
+  }
+  .give .give-cart-items {
+    max-height: none;
+    overflow: visible;
+  }
+  .give .give-jump {
+    position: sticky;
+    bottom: 14px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    min-height: 44px;
+    margin: 28px 0 0 auto;
+    padding: 10px 16px;
+    font-family: var(--f-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+    background: var(--glow);
+    border-radius: 3px;
+    box-shadow: 0 2px 0 #b8922f, 0 12px 22px -10px rgba(0, 0, 0, 0.6);
+  }
+  .desk-page.give a.give-jump {
+    color: var(--ink);
+    text-decoration: none;
+  }
+}
+@media (max-width: 560px) {
+  .give .give-cart {
+    padding: 26px 18px 20px;
+  }
+  .give .give-tabs [role="tab"] {
+    flex: 1 1 auto;
+    padding: 12px 14px 10px;
+  }
+  .give .give-steps li + li::before {
+    width: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .give .give-in {
+    animation: none;
+  }
+}
