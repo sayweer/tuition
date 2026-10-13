@@ -4,7 +4,7 @@ import type { Address } from "@solana/kit";
 import useSWR from "swr";
 import { MINTS, explorerTx, mintSymbol } from "@/lib/constants";
 import { formatAmount, tokenBalance, type Invoice } from "@/lib/escrow";
-import { useApp } from "@/lib/hooks";
+import { useApp, useFee } from "@/lib/hooks";
 import { useLang, useT, type Lang } from "@/lib/i18n";
 import { T } from "./copy";
 
@@ -150,8 +150,21 @@ export function LineStatus({ state, onRetry, canRetry }: { state?: SendState; on
 }
 
 /** The donor's balance in one currency against what the summary needs. */
-export function BalanceCheck({ owner, mint, need }: { owner: Address; mint: Address; need: bigint }) {
+/** `need` is sent as is; each of `gifts` is a net amount to arrive, so it is grossed up for a transfer fee. */
+export function BalanceCheck({
+  owner,
+  mint,
+  need: base = 0n,
+  gifts = [],
+}: {
+  owner: Address;
+  mint: Address;
+  need?: bigint;
+  gifts?: bigint[];
+}) {
   const { rpc } = useApp();
+  const fee = useFee(mint);
+  const need = gifts.reduce((sum, g) => sum + fee.gross(g), base);
   const lang = useLang();
   const t = T[lang];
   const symbol = mintSymbol(mint);

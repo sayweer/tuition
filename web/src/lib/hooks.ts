@@ -6,6 +6,7 @@ import { useConnectedWallet } from "@solana/kit-plugin-wallet/react";
 import { useClient } from "@solana/react";
 import useSWR from "swr";
 import type { AppClient } from "@/app/providers";
+import { feeModelOf, NO_FEE, type FeeModel } from "./actions";
 import { describeError, fetchConfig, fetchInvoice, fetchPayeeName, fetchPool, invoiceHistory, listContributions } from "./escrow";
 import { useLang } from "./i18n";
 
@@ -62,6 +63,12 @@ export function useContributions(invoice: Address | null, refreshKey: unknown) {
 export function usePool(mint: Address | null | undefined) {
   const { rpc } = useApp();
   return useSWR(mint ? ["pool", mint] : null, () => fetchPool(rpc, mint as Address), { refreshInterval: REFRESH_MS });
+}
+
+/** The mint's transfer fee model; no fee until it has loaded. */
+export function useFee(mint: Address | null | undefined): FeeModel {
+  const { rpc } = useApp();
+  return useSWR(mint ? ["fee", mint] : null, () => feeModelOf(rpc, mint as Address)).data ?? NO_FEE;
 }
 
 export function useHistory(invoice: Address | null, refreshKey: unknown) {

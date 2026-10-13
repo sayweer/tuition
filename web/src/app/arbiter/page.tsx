@@ -25,7 +25,7 @@ import {
   tokenProgramOf,
   type InvoiceRow,
 } from "@/lib/escrow";
-import { useApp, useConfig, useNow, usePayeeName, usePool, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, useFee, useNow, usePayeeName, usePool, useSendTx, useWalletAddress } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Copy = Record<
@@ -426,9 +426,12 @@ function CoverRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typeo
   const lang = useLang();
   const t = T[lang];
   const symbol = mintSymbol(inv.mint);
+  const fee = useFee(inv.mint);
   const balance = pool.data?.balance ?? 0n;
   const missing = remainingOf(inv);
-  const max = missing < balance ? missing : balance;
+  // sending the whole pool delivers less than the balance when the mint charges a transfer fee
+  const deliverable = fee.net(balance);
+  const max = missing < deliverable ? missing : deliverable;
   const [text, setText] = useState("");
   const amount = text.trim() ? parseAmount(text, lang) : max;
   const valid = amount !== null && amount > 0n && amount <= max;

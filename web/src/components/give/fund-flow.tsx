@@ -298,8 +298,13 @@ function FundReview({
         {me && !started && (
           <div>
             <p className="label">{t.walletTitle}</p>
-            {totals.map(([mint, need]) => (
-              <BalanceCheck key={mint} owner={me} mint={mint} need={need} />
+            {totals.map(([mint]) => (
+              <BalanceCheck
+                key={mint}
+                owner={me}
+                mint={mint}
+                gifts={gifts.filter((g) => g.inv.mint === mint).map((g) => g.amount)}
+              />
             ))}
             <p className="give-fine">{t.deposit}</p>
           </div>

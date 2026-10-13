@@ -24,7 +24,7 @@ import {
   toHex,
   type Invoice,
 } from "@/lib/escrow";
-import { useApp, useHistory, useInvoice, useNow, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
+import { useApp, useFee, useHistory, useInvoice, useNow, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Tx = ReturnType<typeof useSendTx>;
@@ -306,6 +306,7 @@ function Contribute({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx
   const [text, setText] = useState("");
   // the program rejects contributions from the request's own university or partner (6008)
   const own = me === inv.payee || me === inv.office;
+  const fee = useFee(inv.mint);
   const balance = useSWR(me && !own ? ["balance", me, inv.mint, tx.status] : null, () =>
     tokenBalance(client.rpc, me as Address, inv.mint),
   );
@@ -314,7 +315,8 @@ function Contribute({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx
   const amount = text.trim() ? parseAmount(text, lang) : missing;
   const invalid = amount === null || amount <= 0n;
   const over = !invalid && amount > missing;
-  const short = !invalid && balance.data !== undefined && balance.data < amount;
+  // with a transfer fee the wallet sends a little more than what reaches escrow
+  const short = !invalid && balance.data !== undefined && balance.data < fee.gross(amount);
 
   // past the collecting deadline, CloseFailed takes over this spot
   if (!isFundingOpen(inv, now)) return null;

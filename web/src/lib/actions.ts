@@ -1,5 +1,9 @@
-import type { Address, Instruction } from "@solana/kit";
-import { getCreateAssociatedTokenIdempotentInstructionAsync } from "@solana-program/token-2022";
+import { isSome, type Address, type Instruction } from "@solana/kit";
+import {
+  fetchMint,
+  getCreateAssociatedTokenIdempotentInstructionAsync,
+  TOKEN_2022_PROGRAM_ADDRESS,
+} from "@solana-program/token-2022";
 import {
   getAllocateInstructionAsync,
   getContributeInstructionAsync,
@@ -17,7 +21,45 @@ export function newNonce(index = 0): bigint {
   return BigInt(Date.now()) * 100n + BigInt(index);
 }
 
-/** Family, sponsor or foundation adds `amount` to one request. */
+/** A Token-2022 transfer fee, as the program sees it: `gross` is what to send for exactly `net`
+ *  to arrive, `net` is what arrives when `gross` is sent. Identity for classic SPL and fee-free mints. */
+export type FeeModel = { gross: (net: bigint) => bigint; net: (gross: bigint) => bigint };
+export const NO_FEE: FeeModel = { gross: (n) => n, net: (g) => g };
+
+export async function feeModelOf(rpc: AppClient["rpc"], mint: Address): Promise<FeeModel> {
+  if ((await tokenProgramOf(rpc, mint)) !== TOKEN_2022_PROGRAM_ADDRESS) return NO_FEE;
+  const { data } = await fetchMint(rpc, mint);
+  const ext = isSome(data.extensions)
+    ? data.extensions.value.find((x) => x.__kind === "TransferFeeConfig")
+    : undefined;
+  if (ext?.__kind !== "TransferFeeConfig") return NO_FEE;
+  // the fee charged is the one of the epoch the transaction lands in; a boundary crossing between
+  // building and landing can make the net differ by the rate change (the program then refuses)
+  const { epoch } = await rpc.getEpochInfo().send();
+  const f = epoch >= ext.newerTransferFee.epoch ? ext.newerTransferFee : ext.olderTransferFee;
+  const bps = BigInt(f.transferFeeBasisPoints);
+  if (bps === 0n) return NO_FEE;
+  // Token-2022 rounds the fee up and caps it at maximumFee
+  const fee = (g: bigint) => {
+    const raw = (g * bps + 9_999n) / 10_000n;
+    return raw < f.maximumFee ? raw : f.maximumFee;
+  };
+  const net = (g: bigint) => g - fee(g);
+  const gross = (target: bigint) => {
+    if (target === 0n) return 0n;
+    // the uncapped estimate and the capped answer are each within a step or two of the smallest fit;
+    // net rises by 0 or 1 per unit sent, so every target is reachable
+    const capped = target + f.maximumFee;
+    const estimate = bps < 10_000n ? (target * 10_000n + 9_999n - bps) / (10_000n - bps) : capped;
+    let g = estimate < capped ? estimate : capped;
+    while (g > 0n && net(g - 1n) >= target) g--;
+    while (net(g) < target) g++;
+    return g;
+  };
+  return { gross, net };
+}
+
+/** Family, sponsor or foundation adds `amount` (what should arrive) to one request. */
 export async function contributeIxs(
   client: AppClient,
   invoice: Address,
@@ -35,7 +77,7 @@ export async function contributeIxs(
       mint: inv.mint,
       tokenProgram,
       nonce: newNonce(nonceIndex),
-      amount,
+      amount: (await feeModelOf(client.rpc, inv.mint)).gross(amount),
       toPoolOnFail,
     }),
   ];
@@ -65,7 +107,7 @@ export async function allocateIxs(client: AppClient, invoice: Address, inv: Invo
       mint: inv.mint,
       tokenProgram,
       nonce: newNonce(),
-      amount,
+      amount: (await feeModelOf(client.rpc, inv.mint)).gross(amount),
     }),
   ];
 }
