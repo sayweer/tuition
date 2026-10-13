@@ -90,7 +90,7 @@ const en = {
     frozen: "FROZEN",
     arbiter: "Arbiter · 10:40",
     arbiterNote:
-      "I check the bank receipt and rule. The money can only go to the partner or back to the family. Never anywhere else.",
+      "I check the bank receipt and rule. The money can only go to the partner, back to whoever paid it in, or to the scholarship pool if they chose that. Never anywhere else.",
     ruler: "Payment window",
     limit: "deadline · hour 72",
     log: [
@@ -189,7 +189,7 @@ const tr: typeof en = {
   rules: {
     title: "Bir şeyler ters giderse kurallar karar verir. Bir insan değil.",
     caseA: "Durum A · kimse ödeme yapmadı",
-    caseAH: "Süre dolar. Parayı herkes aileye iade ettirebilir.",
+    caseAH: "Süre dolar. Parayı herkes geri gönderebilir.",
     refundTo: "Ngozi'ye geri",
     refunded: "İADE EDİLDİ",
     caseB: "Durum B · ödendi ama onaylanmadı",
@@ -198,7 +198,7 @@ const tr: typeof en = {
     frozen: "DONDURULDU",
     arbiter: "Hakem · 10:40",
     arbiterNote:
-      "Banka dekontunu inceleyip karar veriyorum. Para yalnızca ödeme ortağına ya da aileye gidebilir. Başka hiçbir yere değil.",
+      "Banka dekontunu inceleyip karar veriyorum. Para yalnızca ödeme ortağına, onu yatıranlara ya da onlar seçtiyse burs havuzuna gidebilir. Başka hiçbir yere değil.",
     ruler: "Ödeme süresi",
     limit: "son tarih · 72. saat",
     log: [

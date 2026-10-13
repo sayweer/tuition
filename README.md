@@ -2,7 +2,7 @@
 
 **Live app: [tuition-omega.vercel.app](https://tuition-omega.vercel.app)** (Solana devnet)
 
-A family abroad locks a Turkish university's tuition in USDG on Solana. Relatives, sponsors and donors can fill the same request in parts, openly or anonymously, and a scholarship pool covers students who fall short. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the donors, the student and the university can each check on their own.
+A family abroad locks a Turkish university's tuition in USDG on Solana. Relatives, sponsors and donors can fill the same request in parts, each from their own wallet, and a scholarship pool covers students who fall short. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the donors, the student and the university can each check on their own.
 
 Built for the Colosseum Crypto World's Fair (Superteam Türkiye local track and Arf × Superteam TR university track). Runs on **Solana devnet** with test tokens.
 
@@ -92,7 +92,7 @@ web/scripts/admin.ts       devnet admin tasks (config, university registry, pool
 - Only allowed mints are accepted. The university and its partner cannot contribute to their own request.
 - **Token-2022:**
   - classic SPL and Token-2022 both work through `token_interface`;
-  - with a transfer fee, the vault books what actually arrived;
+  - with a transfer fee, the vault books what actually arrived, not what was sent (a fee-bearing mint still cannot fully fund a request; see Known limits);
   - mints with an active transfer hook are refused at creation and at payment.
 - A partial clawback by the issuer's permanent delegate pays out the remainder instead of locking the vault.
 
@@ -154,10 +154,12 @@ The script signs with `~/.config/solana/tuition-devnet.json`. Set `SOLANA_KEYPAI
 - **Pool trust.** The scholarship committee (the arbiter key) decides where pool money goes. Pool gifts are not refundable to donors.
 - **Settlement is a crank.** After a failure, money moves only when someone calls `settle_contribution`. Anyone can, and the app offers a button for it; the destination is fixed by the contribution itself.
 - **No cancellation.** An unfunded invoice cannot be cancelled, and accounts are never closed: the receipt is kept on purpose.
+- **Transfer-fee mints cannot reach `Funded`.** `contribute` and `allocate` check the gross amount sent against what is missing, but book only what arrives after the fee. With any non-zero fee, `raised` always stays short of `amount`, so the request can only expire. The fee is zero on both configured mints today.
 - **Issuer risk (USDG).**
   - Paxos holds the permanent delegate, freeze, transfer-fee and transfer-hook authorities on the USDG mint. It can move or freeze tokens in the vault.
   - Enabling a hook after funding blocks payouts until Paxos disables it.
-  - A higher fee reduces what recipients get.
+  - Enabling a non-zero fee stops new and still-collecting requests from reaching `Funded` (see above).
+  - After a partial clawback from a failed request's vault, `settle_contribution` pays contributions in full in the order they are settled, so the last ones settled absorb the shortfall.
 - **CPI Guard.** A payer whose Token-2022 account has CPI Guard enabled cannot pay through the program; use a regular account.
 
 ## Disclosure

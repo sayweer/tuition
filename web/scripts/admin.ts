@@ -35,6 +35,7 @@ import {
 import {
   fetchMaybeConfig,
   findConfigPda,
+  findPoolPda,
   getInitConfigInstructionAsync,
   getInitPoolInstructionAsync,
   getRegisterPayeeInstructionAsync,
@@ -119,6 +120,12 @@ async function main() {
     case "pool": {
       const admin = await loadAdmin();
       for (const m of MINTS) {
+        // Skip pools from an earlier (possibly partial) run so a re-run reaches the rest.
+        const [poolPda] = await findPoolPda({ mint: m.address });
+        if ((await fetchEncodedAccount(rpc, poolPda)).exists) {
+          console.log(`pool ${m.symbol} exists ${poolPda}`);
+          continue;
+        }
         const owner = await fetchEncodedAccount(rpc, m.address);
         if (!owner.exists) throw new Error(`mint ${m.symbol} not found`);
         await send([
