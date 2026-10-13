@@ -246,7 +246,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   const [term, setTerm] = useState(TERMS[0]);
   const [studentRef, setStudentRef] = useState("");
   const [mint, setMint] = useState<Address>(MINTS[0].address);
-  const [windowSecs, setWindowSecs] = useState(PAYMENT_WINDOWS[0].secs);
+  const [windowSecs, setWindowSecs] = useState(PAYMENT_WINDOWS[1].secs);
   const [created, setCreated] = useState<{ invoice: Address; salt: string } | null>(null);
 
   const amountBase = parseAmount(amount);
