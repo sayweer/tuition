@@ -1,6 +1,6 @@
 # Tuition
 
-**Live app: [tuition-omega.vercel.app](https://tuition-omega.vercel.app)** (Solana devnet)
+**Live app: [tuition-omega.vercel.app](https://tuition-omega.vercel.app)** (Solana devnet) · **Pitch video: [youtu.be/4h5bVnV9CDY](https://youtu.be/4h5bVnV9CDY)**
 
 A family abroad locks a Turkish university's tuition in USDG on Solana. Relatives, sponsors and donors can fill the same request in parts, each from their own wallet, and a scholarship pool covers students who fall short. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the donors, the student and the university can each check on their own.
 
