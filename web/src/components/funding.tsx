@@ -38,8 +38,11 @@ type Copy = {
   toPool: string;
   returned: string;
   waiting: string;
+  sentToPool: string;
+  waitingPool: string;
   sendBack: string;
-  sendAllBack: string;
+  sendToPool: string;
+  settleAll: string;
   sending: string;
   connectSettle: string;
   settleText: string;
@@ -74,29 +77,32 @@ const T: Dict<Copy> = {
     toPool: "to the scholarship pool",
     returned: "Sent back",
     waiting: "Waiting to be sent back",
+    sentToPool: "Sent to the pool",
+    waitingPool: "Waiting to go to the pool",
     sendBack: "Send back",
-    sendAllBack: "Send all back",
+    sendToPool: "Send to the pool",
+    settleAll: "Send each to its place",
     sending: "Sending…",
-    connectSettle: "Connect any wallet to send the contributions back.",
+    connectSettle: "Connect any wallet to send each contribution where it belongs.",
     settleText:
       "This request did not go through. Each contribution goes back where its giver chose: their own wallet, or the scholarship pool. Anyone can press the button; the money can only go to that place.",
     closeTitle: "Collecting closed before the full amount was raised",
     closeText:
-      "Close the request so every contribution can be sent back. Anyone can do this; it moves no money by itself.",
+      "Close the request so each contribution can go back to its giver or the pool. Anyone can do this; it moves no money by itself.",
     closeBtn: "Close the request",
     refundTitle: "The payout partner did not report in time",
     refundText:
-      "The deadline passed without the lira being sent. Cancel the request so every contribution can be sent back. Anyone can do this.",
+      "The deadline passed without the lira being sent. Cancel the request so each contribution can go back to its giver or the pool. Anyone can do this.",
     refundBtn: "Cancel the request",
     closing: "Closing…",
-    closedOk: "Request closed. Now send the contributions back below.",
+    closedOk: "Request closed. Now send each contribution where it belongs below.",
     connectClose: "Connect any wallet to close the request.",
   },
   tr: {
-    raisedOf: (r, a, s) => `${a} ${s} hedefin ${r} ${s} kadarı toplandı`,
+    raisedOf: (r, a, s) => `${r} / ${a} ${s} toplandı`,
     missing: (a, s) => `Eksik kalan ${a} ${s}`,
     complete: "Tamamı toplandı",
-    closesIn: "Toplama süresi bitimine",
+    closesIn: "Kalan toplama süresi:",
     closed: "Toplama süresi doldu",
     d: "g",
     h: "sa",
@@ -111,22 +117,25 @@ const T: Dict<Copy> = {
     toPool: "burs havuzuna",
     returned: "Geri gönderildi",
     waiting: "Geri gönderilmeyi bekliyor",
+    sentToPool: "Havuza gönderildi",
+    waitingPool: "Havuza gönderilmeyi bekliyor",
     sendBack: "Geri gönder",
-    sendAllBack: "Hepsini geri gönder",
+    sendToPool: "Havuza gönder",
+    settleAll: "Hepsini yerine gönder",
     sending: "Gönderiliyor…",
-    connectSettle: "Katkıları geri göndermek için herhangi bir cüzdanı bağlayın.",
+    connectSettle: "Her katkıyı gideceği yere göndermek için herhangi bir cüzdanı bağlayın.",
     settleText:
       "Bu talep gerçekleşmedi. Her katkı, sahibinin seçtiği yere döner: kendi cüzdanına ya da burs havuzuna. Düğmeye herkes basabilir; para yalnızca o yere gidebilir.",
     closeTitle: "Toplama süresi, tutarın tamamı toplanmadan doldu",
     closeText:
-      "Katkıların geri gönderilebilmesi için talebi kapatın. Bunu herkes yapabilir; tek başına para hareket ettirmez.",
+      "Her katkının sahibine ya da burs havuzuna dönebilmesi için talebi kapatın. Bunu herkes yapabilir; tek başına para hareket ettirmez.",
     closeBtn: "Talebi kapat",
     refundTitle: "Ödeme ortağı süresinde bildirim yapmadı",
     refundText:
-      "Lira gönderilmeden süre doldu. Katkıların geri gönderilebilmesi için talebi iptal edin. Bunu herkes yapabilir.",
+      "Lira gönderilmeden süre doldu. Her katkının sahibine ya da burs havuzuna dönebilmesi için talebi iptal edin. Bunu herkes yapabilir.",
     refundBtn: "Talebi iptal et",
     closing: "Kapatılıyor…",
-    closedOk: "Talep kapatıldı. Şimdi aşağıdan katkıları geri gönderin.",
+    closedOk: "Talep kapatıldı. Şimdi aşağıdan her katkıyı gideceği yere gönderin.",
     connectClose: "Talebi kapatmak için herhangi bir cüzdanı bağlayın.",
   },
 };
@@ -244,11 +253,14 @@ export function Contributions({ id, inv, actions = true }: { id: Address; inv: I
     } catch (e) {
       console.error(e);
       setRows((r) => ({ ...r, [c.address]: { status: "error", error: describeError(e, lang) } }));
+      // someone else may have settled it meanwhile; the fresh row then shows it as sent
+      list.mutate();
     }
   }
 
   async function settleAll() {
-    for (const c of open) await settle(c);
+    const fresh = (await list.mutate()) ?? items;
+    for (const c of fresh.filter((x) => !x.data.settled && rows[x.address]?.status !== "done")) await settle(c);
     list.mutate();
   }
 
@@ -267,6 +279,7 @@ export function Contributions({ id, inv, actions = true }: { id: Address; inv: I
           {items.map((c) => {
             const row = rows[c.address];
             const settled = c.data.settled || row?.status === "done";
+            const toPool = c.data.toPoolOnFail;
             return (
               <li key={c.address}>
                 <div className="giver-main">
@@ -278,8 +291,8 @@ export function Contributions({ id, inv, actions = true }: { id: Address; inv: I
                   </span>
                 </div>
                 <p className="giver-meta">
-                  {t.ifFails}: {c.data.toPoolOnFail ? t.toPool : t.backToGiver}
-                  {settleable && <> · {settled ? t.returned : t.waiting}</>}
+                  {t.ifFails}: {toPool ? t.toPool : t.backToGiver}
+                  {settleable && <> · {settled ? (toPool ? t.sentToPool : t.returned) : toPool ? t.waitingPool : t.waiting}</>}
                   {row?.signature && (
                     <>
                       {" "}
@@ -296,7 +309,7 @@ export function Contributions({ id, inv, actions = true }: { id: Address; inv: I
                 )}
                 {settleable && actions && !settled && me && (
                   <button className="btn paperbtn small" onClick={() => settle(c)} disabled={busy}>
-                    {row?.status === "pending" ? t.sending : t.sendBack}
+                    {row?.status === "pending" ? t.sending : toPool ? t.sendToPool : t.sendBack}
                   </button>
                 )}
               </li>
@@ -309,7 +322,7 @@ export function Contributions({ id, inv, actions = true }: { id: Address; inv: I
           open.length > 1 && (
             <div className="actions">
               <button className="btn" onClick={settleAll} disabled={busy}>
-                {busy ? t.sending : t.sendAllBack}
+                {busy ? t.sending : t.settleAll}
               </button>
             </div>
           )

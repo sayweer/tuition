@@ -24,7 +24,7 @@ const STATUS_COPY: Dict<Record<Status, { stamp: string; rest: string }>> = {
     [Status.Funded]: { stamp: "Locked", rest: "waiting for the payout partner" },
     [Status.Paid]: { stamp: "Lira sent", rest: "waiting for the university" },
     [Status.Released]: { stamp: "Received", rest: "by the university" },
-    [Status.Refunded]: { stamp: "Refunded", rest: "to the family" },
+    [Status.Refunded]: { stamp: "Refunded", rest: "payout missed; contributions go back" },
     [Status.Resolved]: { stamp: "Settled", rest: "by the arbiter" },
     [Status.Expired]: { stamp: "Not funded", rest: "in time; gifts go back" },
   },
@@ -33,11 +33,27 @@ const STATUS_COPY: Dict<Record<Status, { stamp: string; rest: string }>> = {
     [Status.Funded]: { stamp: "Kilitlendi", rest: "ödeme ortağı bekleniyor" },
     [Status.Paid]: { stamp: "Lira gönderildi", rest: "üniversite bekleniyor" },
     [Status.Released]: { stamp: "Tahsil edildi", rest: "üniversite onayladı" },
-    [Status.Refunded]: { stamp: "İade edildi", rest: "aileye" },
+    [Status.Refunded]: { stamp: "İade edildi", rest: "ödeme yapılmadı; katkılar geri döner" },
     [Status.Resolved]: { stamp: "Karara bağlandı", rest: "hakem tarafından" },
     [Status.Expired]: { stamp: "Tamamlanmadı", rest: "süresinde; katkılar geri döner" },
   },
 };
+
+/** What the chip says once a deadline has passed but nobody has closed the request on-chain yet. */
+const LATE_COPY = {
+  en: {
+    fundingClosed: "collecting closed; the request needs closing",
+    payoutMissed: "payout partner missed the deadline",
+    toOffice: "by the arbiter; paid to the partner",
+    toGivers: "by the arbiter; contributions go back",
+  },
+  tr: {
+    fundingClosed: "toplama süresi doldu; talep kapatılmalı",
+    payoutMissed: "ödeme ortağı süreyi kaçırdı",
+    toOffice: "hakem tarafından; ödeme ortağına",
+    toGivers: "hakem tarafından; katkılar geri döner",
+  },
+} satisfies Dict<Record<string, string>>;
 
 const T = {
   en: {
@@ -70,13 +86,20 @@ const T = {
   },
 } satisfies Dict<Record<string, string>>;
 
-export function StatusBadge({ status }: { status: Status }) {
+/** With `invoice`, the rest text follows the clock: a missed deadline shows before anyone closes the request. */
+export function StatusBadge({ status, invoice }: { status: Status; invoice?: Invoice }) {
+  const now = useNow();
   const { stamp, rest } = useT(STATUS_COPY)[status];
+  const late = useT(LATE_COPY);
   const tone = TONE[status];
+  let text = rest;
+  if (invoice && status === Status.Open && BigInt(now) >= invoice.fundingDeadline) text = late.fundingClosed;
+  else if (invoice && status === Status.Funded && isExpired(invoice, now)) text = late.payoutMissed;
+  else if (invoice && status === Status.Resolved) text = invoice.resolvedToOffice ? late.toOffice : late.toGivers;
   return (
     <span className="status">
       <span className={`ink-chip ink-${tone}`}>{stamp}</span>
-      <span className="status-rest">{rest}</span>
+      <span className="status-rest">{text}</span>
     </span>
   );
 }
@@ -157,12 +180,12 @@ const SEQUENCE: Dict<StepCopy[]> = {
 
 const TERMINAL: Dict<Partial<Record<Status, StepCopy>>> = {
   en: {
-    [Status.Refunded]: { step: "Refunded", text: "Deadline passed without payout: refunded to the family" },
+    [Status.Refunded]: { step: "Refunded", text: "Deadline passed without payout: each contribution goes back to its giver or the scholarship pool" },
     [Status.Resolved]: { step: "Resolved", text: "Arbiter settled the dispute" },
     [Status.Expired]: { step: "Expired", text: "Not fully funded in time: contributions go back" },
   },
   tr: {
-    [Status.Refunded]: { step: "Refunded", text: "Süre ödeme yapılmadan doldu: aileye iade edildi" },
+    [Status.Refunded]: { step: "Refunded", text: "Süre ödeme yapılmadan doldu: her katkı sahibine ya da burs havuzuna döner" },
     [Status.Resolved]: { step: "Resolved", text: "Hakem anlaşmazlığı karara bağladı" },
     [Status.Expired]: { step: "Expired", text: "Süresinde tamamlanmadı: katkılar geri döner" },
   },
