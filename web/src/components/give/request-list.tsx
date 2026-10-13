@@ -28,7 +28,7 @@ type Props = {
   picked: Set<Address>;
   cartCount: number;
   onToggle: (row: InvoiceRow) => void;
-  onAddAll: () => void;
+  onAddAll: (rows: InvoiceRow[]) => void;
   onRemoveAll: () => void;
   onAddLink: (row: InvoiceRow) => void;
   onGoPool: () => void;
@@ -37,17 +37,24 @@ type Props = {
 export function RequestList(p: Props) {
   const t = useT(T);
   const rows = p.rows ?? [];
-  const allPicked = rows.length > 0 && rows.every((r) => p.picked.has(r.address));
+  // The connected wallet can't give to a request it receives or pays out, so those rows aren't offered.
+  const isMine = (r: InvoiceRow) => !!p.me && (p.me === r.data.payee || p.me === r.data.office);
+  const addable = rows.filter((r) => !isMine(r));
+  const allPicked = addable.length > 0 && addable.every((r) => p.picked.has(r.address));
   return (
     <section className="give-list" aria-labelledby={STEP_HEADING}>
       <div className="give-list-head">
         <h2 id={STEP_HEADING} tabIndex={-1} className="give-h2">
           {t.openRequests}
         </h2>
-        {rows.length > 1 && (
+        {addable.length > 1 && (
           <div className="desk-actions">
-            <button type="button" className="btn ghost" onClick={allPicked ? p.onRemoveAll : p.onAddAll}>
-              {allPicked ? t.removeAll : t.selectAll(rows.length)}
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={allPicked ? p.onRemoveAll : () => p.onAddAll(addable.filter((r) => !p.picked.has(r.address)))}
+            >
+              {allPicked ? t.removeAll : t.selectAll(addable.length)}
             </button>
           </div>
         )}
@@ -72,7 +79,14 @@ export function RequestList(p: Props) {
       ) : (
         <div className="slips give-cards">
           {rows.map((r) => (
-            <RequestCard key={r.address} row={r} now={p.now} picked={p.picked.has(r.address)} onToggle={() => p.onToggle(r)} />
+            <RequestCard
+              key={r.address}
+              row={r}
+              now={p.now}
+              picked={p.picked.has(r.address)}
+              mine={isMine(r)}
+              onToggle={() => p.onToggle(r)}
+            />
           ))}
         </div>
       )}
@@ -85,7 +99,19 @@ export function RequestList(p: Props) {
   );
 }
 
-function RequestCard({ row, now, picked, onToggle }: { row: InvoiceRow; now: number; picked: boolean; onToggle: () => void }) {
+function RequestCard({
+  row,
+  now,
+  picked,
+  mine,
+  onToggle,
+}: {
+  row: InvoiceRow;
+  now: number;
+  picked: boolean;
+  mine: boolean;
+  onToggle: () => void;
+}) {
   const lang = useLang();
   const t = T[lang];
   const inv = row.data;
@@ -95,12 +121,12 @@ function RequestCard({ row, now, picked, onToggle }: { row: InvoiceRow; now: num
 
   // The whole card toggles, except its own controls (they handle themselves).
   function onCardClick(e: MouseEvent<HTMLElement>) {
-    if ((e.target as HTMLElement).closest("button, a, input")) return;
+    if (mine || (e.target as HTMLElement).closest("button, a, input")) return;
     onToggle();
   }
 
   return (
-    <article className={`paper sheet slip give-card${picked ? " is-picked" : ""}`} onClick={onCardClick}>
+    <article className={`paper sheet slip give-card${picked ? " is-picked" : ""}${mine ? " is-own" : ""}`} onClick={onCardClick}>
       <i className={picked ? "clip brass" : "clip"} aria-hidden />
       <div className="slip-top">
         <p className="label">
@@ -122,9 +148,13 @@ function RequestCard({ row, now, picked, onToggle }: { row: InvoiceRow; now: num
         <FundingClock deadline={inv.fundingDeadline} now={now} />
       </div>
       <div className="actions">
-        <button type="button" className={picked ? "btn paperbtn" : "btn"} onClick={onToggle}>
-          {picked ? t.remove : t.add}
-        </button>
+        {mine && !picked ? (
+          <span className="ink-chip">{t.ownChip}</span>
+        ) : (
+          <button type="button" className={picked ? "btn paperbtn" : "btn"} onClick={onToggle}>
+            {picked ? t.remove : t.add}
+          </button>
+        )}
       </div>
     </article>
   );

@@ -207,6 +207,9 @@
 .give .give-card {
   cursor: pointer;
 }
+.give .give-card.is-own {
+  cursor: default;
+}
 .give .give-card.is-picked {
   box-shadow: var(--rest), inset 0 0 0 2px var(--ok);
 }

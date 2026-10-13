@@ -19,6 +19,7 @@ type Text =
   | "add"
   | "remove"
   | "inList"
+  | "ownChip"
   | "closed"
   | "d"
   | "h"
@@ -58,6 +59,7 @@ type Text =
   | "reviewOne"
   | "fixFirst"
   | "connectToReview"
+  | "poolConnect"
   | "docLabel"
   | "docTitle"
   | "failTitle"
@@ -147,6 +149,7 @@ export const T: Dict<GiveCopy> = {
     add: "Add to my list",
     remove: "Remove from list",
     inList: "In your list",
+    ownChip: "Your request",
     closesIn: (left) => `${left} left to give`,
     closed: "Funding closed",
     d: "d",
@@ -191,14 +194,15 @@ export const T: Dict<GiveCopy> = {
     poolChoiceOff: "Unchecked: if a request isn't completed in time, your gift returns to your wallet.",
     review: "Review my gifts",
     reviewOne: "Review my gift",
-    fixFirst: "Fix the amounts marked in red to continue.",
+    fixFirst: "Fix or remove the items marked in red to continue.",
     connectToReview:
       "Connect a wallet with the button at the top right to review and give. You can build your list first.",
+    poolConnect: "Connect a wallet with the button at the top right to review and give.",
     docLabel: "Gift summary",
     docTitle: "Please check before you give",
     failTitle: "If a request isn't completed",
     failWhy:
-      "That happens if it isn't fully funded by its funding deadline, the payout partner doesn't pay the university, or the scholarship committee rules for the family.",
+      "That happens if it isn't fully funded by its funding deadline, the payout partner doesn't report paying the university in time, or the scholarship committee rules against the payout partner in a dispute.",
     failPool: "Your gift goes to the scholarship pool and helps other students.",
     failWallet: "Your gift comes back to your wallet.",
     walletTitle: "Your wallet",
@@ -206,7 +210,8 @@ export const T: Dict<GiveCopy> = {
     balanceOk: (have, symbol) => `${have} ${symbol} available. Enough for these gifts.`,
     balanceShort: (have, need, symbol) =>
       `Your wallet has ${have} ${symbol}, but these gifts need ${need} ${symbol}. Lower the amounts or add ${symbol} first; gifts that don't fit will fail.`,
-    deposit: "Each gift also needs a tiny network deposit in SOL from the same wallet.",
+    deposit:
+      "Each gift also pays a tiny one-time SOL amount from the same wallet to keep its record on-chain (it isn't returned), plus a tiny network fee.",
     fee: "The network also charges a tiny fee in SOL.",
     prompts: (n) =>
       n === 1
@@ -281,6 +286,7 @@ export const T: Dict<GiveCopy> = {
     add: "Listeme ekle",
     remove: "Listeden çıkar",
     inList: "Listenizde",
+    ownChip: "Sizin talebiniz",
     closesIn: (left) => `Toplama süresi: ${left} kaldı`,
     closed: "Toplama süresi doldu",
     d: "g",
@@ -325,14 +331,15 @@ export const T: Dict<GiveCopy> = {
     poolChoiceOff: "İşaretsiz: bir talep zamanında tamamlanmazsa bağışınız cüzdanınıza geri döner.",
     review: "Özeti gör",
     reviewOne: "Özeti gör",
-    fixFirst: "Devam etmek için kırmızıyla işaretli tutarları düzeltin.",
+    fixFirst: "Devam etmek için kırmızıyla işaretli kalemleri düzeltin ya da kaldırın.",
     connectToReview:
       "Özeti görmek ve bağış yapmak için sağ üstteki düğmeyle bir cüzdan bağlayın. Listenizi önceden hazırlayabilirsiniz.",
+    poolConnect: "Özeti görmek ve bağış yapmak için sağ üstteki düğmeyle bir cüzdan bağlayın.",
     docLabel: "Bağış özeti",
     docTitle: "Göndermeden önce kontrol edin",
     failTitle: "Bir talep tamamlanmazsa",
     failWhy:
-      "Bu; talep toplama süresi içinde tamamlanmazsa, ödeme ortağı üniversiteye ödeme yapmazsa ya da burs kurulu aileden yana karar verirse olur.",
+      "Bu; talep toplama süresi içinde tamamlanmazsa, ödeme ortağı üniversiteye ödemeyi süresinde bildirmezse ya da burs komitesi bir itirazda ödeme ortağı aleyhine karar verirse olur.",
     failPool: "Bağışınız burs havuzuna gider ve başka öğrencilere destek olur.",
     failWallet: "Bağışınız cüzdanınıza geri döner.",
     walletTitle: "Cüzdanınız",
@@ -340,7 +347,8 @@ export const T: Dict<GiveCopy> = {
     balanceOk: (have, symbol) => `${have} ${symbol} mevcut. Bu bağışlar için yeterli.`,
     balanceShort: (have, need, symbol) =>
       `Cüzdanınızda ${have} ${symbol} var, ancak bu bağışlar için ${need} ${symbol} gerekiyor. Tutarları azaltın ya da önce ${symbol} ekleyin; sığmayan bağışlar gerçekleşmez.`,
-    deposit: "Her bağış, aynı cüzdandan küçük bir SOL ağ depozitosu da gerektirir.",
+    deposit:
+      "Her bağış, kaydını zincirde tutmak için aynı cüzdandan çok küçük, tek seferlik ve iade edilmeyen bir SOL tutarı öder; ağ ayrıca çok küçük bir ücret alır.",
     fee: "Ağ ayrıca çok küçük bir SOL ücreti alır.",
     prompts: (n) =>
       n === 1
@@ -377,7 +385,7 @@ export const T: Dict<GiveCopy> = {
     poolLabel: "Burs havuzu",
     poolTitle: "Burs havuzuna bağış yap",
     poolText:
-      "Burs kurulu havuzu, toplama süresi yaklaşan ve harcı hâlâ eksik olan öğrencileri desteklemek için kullanır.",
+      "Burs komitesi havuzu, toplama süresi yaklaşan ve harcı hâlâ eksik olan öğrencileri desteklemek için kullanır.",
     currency: "Para birimi",
     poolNow: "Şu an havuzda",
     poolDonated: "Bağışçılardan gelen",
@@ -388,8 +396,8 @@ export const T: Dict<GiveCopy> = {
     poolAmountHint: (symbol) => `${symbol} cinsinden. Her tutar değerlidir.`,
     poolErrZero: "0'dan büyük bir tutar girin.",
     poolLine: "Burs havuzu",
-    poolFinal: "Havuz bağışları geri ödenmez. Burs kurulu bunları öğrencilere yönlendirir.",
+    poolFinal: "Havuz bağışları geri ödenmez. Burs komitesi bunları öğrencilere yönlendirir.",
     poolDoneTitle: "Bağışınız havuzda.",
-    poolDoneText: "Burs kurulu bunu harcı eksik kalan bir öğrenciye yönlendirecek.",
+    poolDoneText: "Burs komitesi bunu harcı eksik kalan bir öğrenciye yönlendirecek.",
   },
 };

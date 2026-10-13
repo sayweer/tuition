@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
 import type { Address } from "@solana/kit";
 import useSWR from "swr";
 import { ConnectPrompt } from "@/components/ui";
-import { contributeIxs } from "@/lib/actions";
+import { contributeIxs, newNonce } from "@/lib/actions";
 import { explorerTx, mintSymbol } from "@/lib/constants";
 import {
   Status,
@@ -14,6 +14,7 @@ import {
   formatAmount,
   formatTerm,
   isFundingOpen,
+  listContributions,
   listInvoices,
   remainingOf,
   shortAddress,
@@ -39,6 +40,8 @@ type Props = {
 };
 
 type Results = Record<string, SendState>;
+/** Per request: the paying wallet and the lowest nonce its first unconfirmed attempt could carry. */
+type Attempts = Map<Address, { payer: Address; since: bigint }>;
 
 export function FundFlow(p: Props) {
   const { rpc } = useApp();
@@ -48,6 +51,8 @@ export function FundFlow(p: Props) {
   const [justAdded, setJustAdded] = useState<Address | null>(null);
   const [gifts, setGifts] = useState<Gift[]>([]);
   const [results, setResults] = useState<Results>({});
+  // Lives here, not in FundReview, so a gift re-sent after "Give again" is still checked for an earlier landing.
+  const attempts = useRef<Attempts>(new Map());
 
   const open = useSWR("give-open", () => listInvoices(rpc, { status: Status.Open }), { refreshInterval: 8000 });
   const rows = open.data?.filter((r) => isFundingOpen(r.data, now) && remainingOf(r.data) > 0n);
@@ -74,7 +79,7 @@ export function FundFlow(p: Props) {
     setGifts(
       p.cart.flatMap((item) => {
         const amount = checks.get(item.address)?.amount ?? 0n;
-        return amount > 0n ? [{ address: item.address, inv: invOf(item), amount }] : [];
+        return amount > 0n ? [{ address: item.address, inv: invOf(item), amount, full: item.amountText === null }] : [];
       }),
     );
     setResults({});
@@ -83,7 +88,9 @@ export function FundFlow(p: Props) {
   }
 
   function restart() {
-    p.setCart(() => []);
+    // Keep the gifts that didn't go through, so the donor can change or remove them instead of finding them again.
+    const failed = new Set(gifts.filter((g) => results[g.address]?.status !== "done").map((g) => g.address));
+    p.setCart((prev) => prev.filter((c) => failed.has(c.address)));
     setGifts([]);
     setResults({});
     open.mutate();
@@ -94,8 +101,10 @@ export function FundFlow(p: Props) {
     return (
       <FundReview
         gifts={gifts}
+        setGifts={setGifts}
         results={results}
         setResults={setResults}
+        attempts={attempts}
         me={p.me}
         toPool={p.toPool}
         onEdit={() => p.setStep(1)}
@@ -114,8 +123,11 @@ export function FundFlow(p: Props) {
         picked={picked}
         cartCount={p.cart.length}
         onToggle={(row) => (picked.has(row.address) ? remove(row.address) : add(row))}
-        onAddAll={() => rows?.filter((r) => !picked.has(r.address)).forEach(add)}
-        onRemoveAll={() => p.setCart((prev) => prev.filter((c) => !rows?.some((r) => r.address === c.address)))}
+        onAddAll={(rs) => rs.forEach(add)}
+        // Also drops items that left the open list (closed or completed): they can only block the review.
+        onRemoveAll={() =>
+          p.setCart((prev) => prev.filter((c) => !rows?.some((r) => r.address === c.address) && !checks.get(c.address)?.blocked))
+        }
         onAddLink={add}
         onGoPool={p.onGoPool}
       />
@@ -137,21 +149,30 @@ export function FundFlow(p: Props) {
   );
 }
 
-/** Thrown for problems we caught before asking the wallet, so nothing was sent. */
-class Caught extends Error {}
+/** Thrown for problems we caught before asking the wallet, so nothing was sent. `final` when a
+ *  retry would hit the same problem. */
+class Caught extends Error {
+  constructor(message: string, readonly final = true) {
+    super(message);
+  }
+}
 
 function FundReview({
   gifts,
+  setGifts,
   results,
   setResults,
+  attempts,
   me,
   toPool,
   onEdit,
   onDone,
 }: {
   gifts: Gift[];
+  setGifts: (update: (prev: Gift[]) => Gift[]) => void;
   results: Results;
   setResults: (update: (prev: Results) => Results) => void;
+  attempts: RefObject<Attempts>;
   me: Address | null;
   toPool: boolean;
   onEdit: () => void;
@@ -166,24 +187,64 @@ function FundReview({
   const settled = started && !running && gifts.every((g) => ["done", "error"].includes(results[g.address]?.status ?? ""));
   const totals = useMemo(() => totalsByMint(gifts.map((g) => ({ mint: g.inv.mint, amount: g.amount }))), [gifts]);
   const set = (address: Address, s: SendState) => setResults((prev) => ({ ...prev, [address]: s }));
+  const setAmount = (address: Address, amount: bigint) =>
+    setGifts((prev) => prev.map((x) => (x.address === address ? { ...x, amount } : x)));
+
+  // Each gift's hand-offs to the wallet: the paying wallet and the lowest nonce its first unconfirmed
+  // attempt could carry (contributeIxs derives the nonce from the clock, so newNonce() just before is a
+  // floor). An error can still follow a gift that landed (e.g. the confirmation dropped), and each
+  // attempt makes a new contribution, so before calling a gift failed or re-sending it we look for any
+  // contribution from that wallet since the first attempt. Cleared once the gift is confirmed.
+  async function landedAmount(g: Gift): Promise<bigint | null> {
+    const a = attempts.current.get(g.address);
+    if (!a) return null;
+    const rows = await listContributions(client.rpc, g.address);
+    return rows.find((r) => r.data.contributor === a.payer && r.data.nonce >= a.since)?.data.amount ?? null;
+  }
+  function markLanded(g: Gift, amount: bigint) {
+    attempts.current.delete(g.address);
+    if (amount !== g.amount) setAmount(g.address, amount);
+    set(g.address, { status: "done" });
+  }
 
   async function sendOne(g: Gift, index: number): Promise<boolean> {
     set(g.address, { status: "signing" });
     try {
+      const landed = await landedAmount(g);
+      if (landed !== null) {
+        markLanded(g, landed);
+        return true;
+      }
       // Re-read right before signing: someone may have given, or the deadline passed, since review.
       const inv = await fetchInvoice(client.rpc, g.address);
       if (!inv || !isFundingOpen(inv, nowSecs())) throw new Caught(t.errClosedNow);
       const left = remainingOf(inv);
       if (left === 0n) throw new Caught(t.errFundedNow);
-      if (left < g.amount) throw new Caught(t.errLessNow(formatAmount(left, lang), mintSymbol(inv.mint)));
-      if (client.payer.address === inv.payee || client.payer.address === inv.office) throw new Caught(t.own);
-      const ixs = await contributeIxs(client, g.address, inv, g.amount, toPool, index % 100);
+      if (left < g.amount && !g.full) throw new Caught(t.errLessNow(formatAmount(left, lang), mintSymbol(inv.mint)));
+      // The wallet can be switched, so this one may pass on a retry.
+      if (client.payer.address === inv.payee || client.payer.address === inv.office) throw new Caught(t.own, false);
+      const amount = left < g.amount ? left : g.amount;
+      if (amount !== g.amount) setAmount(g.address, amount);
+      // Keep the first attempt's floor: a late landing from any earlier attempt must still be found.
+      const prev = attempts.current.get(g.address);
+      attempts.current.set(g.address, { payer: client.payer.address, since: prev?.payer === client.payer.address ? prev.since : newNonce() });
+      const ixs = await contributeIxs(client, g.address, inv, amount, toPool, index % 100);
       const result = await client.sendTransaction(ixs);
+      attempts.current.delete(g.address);
       set(g.address, { status: "done", signature: result.context.signature });
       return true;
     } catch (e) {
-      if (!(e instanceof Caught)) console.error(e);
-      set(g.address, { status: "error", error: e instanceof Caught ? e.message : describeError(e, lang) });
+      if (e instanceof Caught) {
+        set(g.address, { status: "error", error: e.message, final: e.final });
+        return false;
+      }
+      console.error(e);
+      const landed = await landedAmount(g).catch(() => null);
+      if (landed !== null) {
+        markLanded(g, landed);
+        return true;
+      }
+      set(g.address, { status: "error", error: describeError(e, lang) });
       return false;
     }
   }
@@ -218,7 +279,11 @@ function FundReview({
       <ul className="give-lines">
         {gifts.map((g, i) => (
           <GiftLine key={g.address} gift={g}>
-            <LineStatus state={results[g.address]} canRetry={!running} onRetry={() => retry(g, i)} />
+            <LineStatus
+              state={results[g.address]}
+              canRetry={!running}
+              onRetry={results[g.address]?.final ? undefined : () => retry(g, i)}
+            />
           </GiftLine>
         ))}
       </ul>

@@ -33,7 +33,7 @@ export function checkItem(item: CartItem, inv: Invoice, now: number, me: Address
   if (item.amountText === null) return { amount: missing, error: null, blocked: false };
   const raw = item.amountText.trim();
   if (!raw) return { amount: 0n, error: t.errEmpty, blocked: false };
-  const amount = parseAmount(raw);
+  const amount = parseAmount(raw, lang);
   if (amount === null) return { amount: 0n, error: t.errFormat, blocked: false };
   if (amount > missing) return { amount: 0n, error: t.errOver(formatAmount(missing, lang), mintSymbol(inv.mint)), blocked: false };
   return { amount, error: null, blocked: false };

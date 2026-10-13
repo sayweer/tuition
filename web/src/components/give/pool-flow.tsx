@@ -22,7 +22,7 @@ export function PoolFlow({ step, setStep, me }: { step: Step; setStep: (s: Step)
   const id = useId();
 
   const symbol = mintSymbol(mint);
-  const amount = parseAmount(amountText);
+  const amount = parseAmount(amountText, lang);
   const error = !amountText.trim() ? null : amount === null ? t.errFormat : amount === 0n ? t.poolErrZero : null;
   const poolMissing = pool.data === null;
   const canReview = !!amount && amount > 0n && !poolMissing && pool.data !== undefined;
@@ -121,7 +121,16 @@ export function PoolFlow({ step, setStep, me }: { step: Step; setStep: (s: Step)
           <>
             <p className="give-fine give-prompts">{t.prompts(1)}</p>
             <div className="actions">
-              <button type="button" className="btn paperbtn" onClick={() => setStep(1)} disabled={tx.status === "pending"}>
+              <button
+                type="button"
+                className="btn paperbtn"
+                onClick={() => {
+                  // A new amount hasn't been tried yet, so the last attempt's error and "Retry" go.
+                  tx.reset();
+                  setStep(1);
+                }}
+                disabled={tx.status === "pending"}
+              >
                 <span className="arr" aria-hidden>←</span> {t.edit}
               </button>
               <button type="button" className="btn" onClick={give} disabled={tx.status === "pending"}>
@@ -225,7 +234,7 @@ export function PoolFlow({ step, setStep, me }: { step: Step; setStep: (s: Step)
       </div>
 
       {!me ? (
-        <ConnectPrompt>{t.connectToReview}</ConnectPrompt>
+        <ConnectPrompt>{t.poolConnect}</ConnectPrompt>
       ) : (
         <div className="actions">
           <button type="button" className="btn" disabled={!canReview} onClick={() => setStep(2)}>

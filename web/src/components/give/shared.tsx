@@ -14,10 +14,17 @@ export type Step = 1 | 2 | 3;
  *  follows the request live if someone else gives meanwhile. */
 export type CartItem = { address: Address; inv: Invoice; amountText: string | null };
 
-/** A frozen line of the gift summary. */
-export type Gift = { address: Address; inv: Invoice; amount: bigint };
+/** A line of the gift summary. Its amount is frozen at review, except a `full` line (the full
+ *  missing amount), which gives what is still missing at send time if someone else gave meanwhile. */
+export type Gift = { address: Address; inv: Invoice; amount: bigint; full: boolean };
 
-export type SendState = { status: "waiting" | "signing" | "done" | "error"; signature?: string; error?: string };
+/** `final`: the error can't change on a retry (the request closed or filled up), so none is offered. */
+export type SendState = {
+  status: "waiting" | "signing" | "done" | "error";
+  signature?: string;
+  error?: string;
+  final?: boolean;
+};
 
 /** Id of the heading each step opens with; the page moves focus there when the step changes. */
 export const STEP_HEADING = "give-step-heading";
