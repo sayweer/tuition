@@ -70,6 +70,7 @@ export type CreateInvoiceInstruction<
   TAccountPayee extends string | AccountMeta<string> = string,
   TAccountPayeeRecord extends string | AccountMeta<string> = string,
   TAccountConfig extends string | AccountMeta<string> = string,
+  TAccountOffice extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountInvoice extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
@@ -92,6 +93,9 @@ export type CreateInvoiceInstruction<
       TAccountConfig extends string
         ? ReadonlyAccount<TAccountConfig>
         : TAccountConfig,
+      TAccountOffice extends string
+        ? ReadonlyAccount<TAccountOffice>
+        : TAccountOffice,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
@@ -119,6 +123,7 @@ export type CreateInvoiceInstructionData = {
   term: number;
   studentRefHash: ReadonlyUint8Array;
   windowSecs: bigint;
+  fundingSecs: bigint;
 };
 
 export type CreateInvoiceInstructionDataArgs = {
@@ -128,6 +133,7 @@ export type CreateInvoiceInstructionDataArgs = {
   term: number;
   studentRefHash: ReadonlyUint8Array;
   windowSecs: number | bigint;
+  fundingSecs: number | bigint;
 };
 
 export function getCreateInvoiceInstructionDataEncoder(): FixedSizeEncoder<CreateInvoiceInstructionDataArgs> {
@@ -140,6 +146,7 @@ export function getCreateInvoiceInstructionDataEncoder(): FixedSizeEncoder<Creat
       ["term", getU32Encoder()],
       ["studentRefHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["windowSecs", getI64Encoder()],
+      ["fundingSecs", getI64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CREATE_INVOICE_DISCRIMINATOR }),
   );
@@ -154,6 +161,7 @@ export function getCreateInvoiceInstructionDataDecoder(): FixedSizeDecoder<Creat
     ["term", getU32Decoder()],
     ["studentRefHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["windowSecs", getI64Decoder()],
+    ["fundingSecs", getI64Decoder()],
   ]);
 }
 
@@ -171,6 +179,7 @@ export type CreateInvoiceAsyncInput<
   TAccountPayee extends InstructionSignerInput = InstructionSignerInput,
   TAccountPayeeRecord extends InstructionAccountInput = InstructionAccountInput,
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
+  TAccountOffice extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
@@ -182,6 +191,7 @@ export type CreateInvoiceAsyncInput<
   payee: TAccountPayee;
   payeeRecord?: TAccountPayeeRecord;
   config?: TAccountConfig;
+  office: TAccountOffice;
   mint: TAccountMint;
   invoice?: TAccountInvoice;
   vault?: TAccountVault;
@@ -193,12 +203,14 @@ export type CreateInvoiceAsyncInput<
   term: CreateInvoiceInstructionDataArgs["term"];
   studentRefHash: CreateInvoiceInstructionDataArgs["studentRefHash"];
   windowSecs: CreateInvoiceInstructionDataArgs["windowSecs"];
+  fundingSecs: CreateInvoiceInstructionDataArgs["fundingSecs"];
 };
 
 export async function getCreateInvoiceInstructionAsync<
   TAccountPayee extends InstructionSignerInput,
   TAccountPayeeRecord extends InstructionAccountInput,
   TAccountConfig extends InstructionAccountInput,
+  TAccountOffice extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
@@ -210,6 +222,7 @@ export async function getCreateInvoiceInstructionAsync<
     TAccountPayee,
     TAccountPayeeRecord,
     TAccountConfig,
+    TAccountOffice,
     TAccountMint,
     TAccountInvoice,
     TAccountVault,
@@ -231,6 +244,10 @@ export async function getCreateInvoiceInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountConfig,
       InstructionAccountInputAddress<TAccountConfig>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountOffice,
+      InstructionAccountInputAddress<TAccountOffice>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -270,6 +287,7 @@ export async function getCreateInvoiceInstructionAsync<
       isWritable: false,
     },
     config: { value: input.config ?? null, isSigner: false, isWritable: false },
+    office: { value: input.office ?? null, isSigner: false, isWritable: false },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     invoice: {
       value: input.invoice ?? null,
@@ -348,6 +366,7 @@ export async function getCreateInvoiceInstructionAsync<
       getAccountMeta("payee", accounts.payee),
       getAccountMeta("payeeRecord", accounts.payeeRecord),
       getAccountMeta("config", accounts.config),
+      getAccountMeta("office", accounts.office),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
@@ -371,6 +390,10 @@ export async function getCreateInvoiceInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountConfig,
       InstructionAccountInputAddress<TAccountConfig>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountOffice,
+      InstructionAccountInputAddress<TAccountOffice>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -399,6 +422,7 @@ export type CreateInvoiceInput<
   TAccountPayee extends InstructionSignerInput = InstructionSignerInput,
   TAccountPayeeRecord extends InstructionAccountInput = InstructionAccountInput,
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
+  TAccountOffice extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
@@ -410,6 +434,7 @@ export type CreateInvoiceInput<
   payee: TAccountPayee;
   payeeRecord: TAccountPayeeRecord;
   config: TAccountConfig;
+  office: TAccountOffice;
   mint: TAccountMint;
   invoice: TAccountInvoice;
   vault: TAccountVault;
@@ -421,12 +446,14 @@ export type CreateInvoiceInput<
   term: CreateInvoiceInstructionDataArgs["term"];
   studentRefHash: CreateInvoiceInstructionDataArgs["studentRefHash"];
   windowSecs: CreateInvoiceInstructionDataArgs["windowSecs"];
+  fundingSecs: CreateInvoiceInstructionDataArgs["fundingSecs"];
 };
 
 export function getCreateInvoiceInstruction<
   TAccountPayee extends InstructionSignerInput,
   TAccountPayeeRecord extends InstructionAccountInput,
   TAccountConfig extends InstructionAccountInput,
+  TAccountOffice extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
@@ -438,6 +465,7 @@ export function getCreateInvoiceInstruction<
     TAccountPayee,
     TAccountPayeeRecord,
     TAccountConfig,
+    TAccountOffice,
     TAccountMint,
     TAccountInvoice,
     TAccountVault,
@@ -458,6 +486,10 @@ export function getCreateInvoiceInstruction<
   ResolvedInstructionAccountMeta<
     TAccountConfig,
     InstructionAccountInputAddress<TAccountConfig>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountOffice,
+    InstructionAccountInputAddress<TAccountOffice>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -496,6 +528,7 @@ export function getCreateInvoiceInstruction<
       isWritable: false,
     },
     config: { value: input.config ?? null, isSigner: false, isWritable: false },
+    office: { value: input.office ?? null, isSigner: false, isWritable: false },
     mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
     invoice: {
       value: input.invoice ?? null,
@@ -537,6 +570,7 @@ export function getCreateInvoiceInstruction<
       getAccountMeta("payee", accounts.payee),
       getAccountMeta("payeeRecord", accounts.payeeRecord),
       getAccountMeta("config", accounts.config),
+      getAccountMeta("office", accounts.office),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
@@ -560,6 +594,10 @@ export function getCreateInvoiceInstruction<
     ResolvedInstructionAccountMeta<
       TAccountConfig,
       InstructionAccountInputAddress<TAccountConfig>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountOffice,
+      InstructionAccountInputAddress<TAccountOffice>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -593,11 +631,12 @@ export type ParsedCreateInvoiceInstruction<
     payee: TAccountMetas[0];
     payeeRecord: TAccountMetas[1];
     config: TAccountMetas[2];
-    mint: TAccountMetas[3];
-    invoice: TAccountMetas[4];
-    vault: TAccountMetas[5];
-    tokenProgram: TAccountMetas[6];
-    systemProgram: TAccountMetas[7];
+    office: TAccountMetas[3];
+    mint: TAccountMetas[4];
+    invoice: TAccountMetas[5];
+    vault: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
+    systemProgram: TAccountMetas[8];
   };
   data: CreateInvoiceInstructionData;
 };
@@ -610,12 +649,12 @@ export function parseCreateInvoiceInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateInvoiceInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 9) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 9,
       },
     );
   }
@@ -631,6 +670,7 @@ export function parseCreateInvoiceInstruction<
       payee: getNextAccount(),
       payeeRecord: getNextAccount(),
       config: getNextAccount(),
+      office: getNextAccount(),
       mint: getNextAccount(),
       invoice: getNextAccount(),
       vault: getNextAccount(),

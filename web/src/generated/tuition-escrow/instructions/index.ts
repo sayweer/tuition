@@ -7,11 +7,16 @@
  */
 
 export * from "./acknowledge";
+export * from "./allocate";
+export * from "./contribute";
 export * from "./createInvoice";
+export * from "./donate";
+export * from "./expire";
 export * from "./initConfig";
+export * from "./initPool";
 export * from "./markPaid";
-export * from "./payInvoice";
 export * from "./refund";
 export * from "./registerPayee";
 export * from "./resolve";
+export * from "./settleContribution";
 export * from "./updateConfig";

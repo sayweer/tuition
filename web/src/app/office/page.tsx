@@ -212,7 +212,7 @@ function PayRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typeof 
       <p className="slip-amount">{formatTry(inv.amountTryKurus, lang)}</p>
       <p className="slip-meta">
         {t.to} <b>{school.data ?? shortAddress(inv.payee)}</b>.{" "}
-        {t.escrowHolds(formatAmount(inv.deposited, lang), mintSymbol(inv.mint))}
+        {t.escrowHolds(formatAmount(inv.raised, lang), mintSymbol(inv.mint))}
       </p>
       <p className="slip-ref">
         <span className="label">{t.transferRef}</span>

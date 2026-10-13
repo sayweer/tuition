@@ -26,21 +26,18 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
-  type ReadonlyAccount,
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
-  getAddressFromResolvedInstructionAccount,
   type InstructionAccountInput,
   type InstructionAccountInputAddress,
   type InstructionSignerInput,
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/kit/program-client-core";
-import { findVaultPda } from "../pdas";
 import { TUITION_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
 export const REFUND_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -55,11 +52,6 @@ export type RefundInstruction<
   TProgram extends string = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
   TAccountCaller extends string | AccountMeta<string> = string,
   TAccountInvoice extends string | AccountMeta<string> = string,
-  TAccountVault extends string | AccountMeta<string> = string,
-  TAccountPayerToken extends string | AccountMeta<string> = string,
-  TAccountMint extends string | AccountMeta<string> = string,
-  TAccountTokenProgram extends string | AccountMeta<string> =
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -72,18 +64,6 @@ export type RefundInstruction<
       TAccountInvoice extends string
         ? WritableAccount<TAccountInvoice>
         : TAccountInvoice,
-      TAccountVault extends string
-        ? WritableAccount<TAccountVault>
-        : TAccountVault,
-      TAccountPayerToken extends string
-        ? WritableAccount<TAccountPayerToken>
-        : TAccountPayerToken,
-      TAccountMint extends string
-        ? ReadonlyAccount<TAccountMint>
-        : TAccountMint,
-      TAccountTokenProgram extends string
-        ? ReadonlyAccount<TAccountTokenProgram>
-        : TAccountTokenProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -115,194 +95,20 @@ export function getRefundInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type RefundAsyncInput<
-  TAccountCaller extends InstructionSignerInput = InstructionSignerInput,
-  TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput = InstructionAccountInput,
-  TAccountMint extends InstructionAccountInput = InstructionAccountInput,
-  TAccountTokenProgram extends InstructionAccountInput =
-    InstructionAccountInput,
-> = {
-  caller: TAccountCaller;
-  invoice: TAccountInvoice;
-  vault?: TAccountVault;
-  payerToken: TAccountPayerToken;
-  mint: TAccountMint;
-  tokenProgram?: TAccountTokenProgram;
-};
-
-export async function getRefundInstructionAsync<
-  TAccountCaller extends InstructionSignerInput,
-  TAccountInvoice extends InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput,
-  TAccountMint extends InstructionAccountInput,
-  TAccountTokenProgram extends InstructionAccountInput,
-  TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
->(
-  input: RefundAsyncInput<
-    TAccountCaller,
-    TAccountInvoice,
-    TAccountVault,
-    TAccountPayerToken,
-    TAccountMint,
-    TAccountTokenProgram
-  >,
-  config?: { programAddress?: TProgramAddress },
-): Promise<
-  RefundInstruction<
-    TProgramAddress,
-    ResolvedInstructionAccountMeta<
-      TAccountCaller,
-      InstructionAccountInputAddress<TAccountCaller>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountInvoice,
-      InstructionAccountInputAddress<TAccountInvoice>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountMint,
-      InstructionAccountInputAddress<TAccountMint>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountTokenProgram,
-      InstructionAccountInputAddress<TAccountTokenProgram>
-    >
-  >
-> {
-  // Program address.
-  const programAddress =
-    config?.programAddress ?? TUITION_ESCROW_PROGRAM_ADDRESS;
-
-  // Account meta helper.
-  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
-
-  // Original accounts.
-  const originalAccounts = {
-    caller: { value: input.caller ?? null, isSigner: true, isWritable: false },
-    invoice: {
-      value: input.invoice ?? null,
-      isSigner: false,
-      isWritable: true,
-    },
-    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    payerToken: {
-      value: input.payerToken ?? null,
-      isSigner: false,
-      isWritable: true,
-    },
-    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
-    tokenProgram: {
-      value: input.tokenProgram ?? null,
-      isSigner: false,
-      isWritable: false,
-    },
-  };
-  const accounts = originalAccounts as Record<
-    keyof typeof originalAccounts,
-    ResolvedInstructionAccount
-  >;
-
-  // Resolve default values.
-  if (!accounts.vault.value) {
-    accounts.vault.value = await findVaultPda(
-      {
-        invoice: getAddressFromResolvedInstructionAccount(
-          "invoice",
-          accounts.invoice.value,
-        ),
-      },
-      { programAddress },
-    );
-  }
-  if (!accounts.tokenProgram.value) {
-    accounts.tokenProgram.value =
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
-  }
-
-  return Object.freeze({
-    accounts: [
-      getAccountMeta("caller", accounts.caller),
-      getAccountMeta("invoice", accounts.invoice),
-      getAccountMeta("vault", accounts.vault),
-      getAccountMeta("payerToken", accounts.payerToken),
-      getAccountMeta("mint", accounts.mint),
-      getAccountMeta("tokenProgram", accounts.tokenProgram),
-    ],
-    data: getRefundInstructionDataEncoder().encode({}),
-    programAddress,
-  } as RefundInstruction<
-    TProgramAddress,
-    ResolvedInstructionAccountMeta<
-      TAccountCaller,
-      InstructionAccountInputAddress<TAccountCaller>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountInvoice,
-      InstructionAccountInputAddress<TAccountInvoice>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountMint,
-      InstructionAccountInputAddress<TAccountMint>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountTokenProgram,
-      InstructionAccountInputAddress<TAccountTokenProgram>
-    >
-  >);
-}
-
 export type RefundInput<
   TAccountCaller extends InstructionSignerInput = InstructionSignerInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput = InstructionAccountInput,
-  TAccountMint extends InstructionAccountInput = InstructionAccountInput,
-  TAccountTokenProgram extends InstructionAccountInput =
-    InstructionAccountInput,
 > = {
   caller: TAccountCaller;
   invoice: TAccountInvoice;
-  vault: TAccountVault;
-  payerToken: TAccountPayerToken;
-  mint: TAccountMint;
-  tokenProgram?: TAccountTokenProgram;
 };
 
 export function getRefundInstruction<
   TAccountCaller extends InstructionSignerInput,
   TAccountInvoice extends InstructionAccountInput,
-  TAccountVault extends InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput,
-  TAccountMint extends InstructionAccountInput,
-  TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: RefundInput<
-    TAccountCaller,
-    TAccountInvoice,
-    TAccountVault,
-    TAccountPayerToken,
-    TAccountMint,
-    TAccountTokenProgram
-  >,
+  input: RefundInput<TAccountCaller, TAccountInvoice>,
   config?: { programAddress?: TProgramAddress },
 ): RefundInstruction<
   TProgramAddress,
@@ -313,22 +119,6 @@ export function getRefundInstruction<
   ResolvedInstructionAccountMeta<
     TAccountInvoice,
     InstructionAccountInputAddress<TAccountInvoice>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountVault,
-    InstructionAccountInputAddress<TAccountVault>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountPayerToken,
-    InstructionAccountInputAddress<TAccountPayerToken>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountMint,
-    InstructionAccountInputAddress<TAccountMint>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountTokenProgram,
-    InstructionAccountInputAddress<TAccountTokenProgram>
   >
 > {
   // Program address.
@@ -346,38 +136,16 @@ export function getRefundInstruction<
       isSigner: false,
       isWritable: true,
     },
-    vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    payerToken: {
-      value: input.payerToken ?? null,
-      isSigner: false,
-      isWritable: true,
-    },
-    mint: { value: input.mint ?? null, isSigner: false, isWritable: false },
-    tokenProgram: {
-      value: input.tokenProgram ?? null,
-      isSigner: false,
-      isWritable: false,
-    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
 
-  // Resolve default values.
-  if (!accounts.tokenProgram.value) {
-    accounts.tokenProgram.value =
-      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
-  }
-
   return Object.freeze({
     accounts: [
       getAccountMeta("caller", accounts.caller),
       getAccountMeta("invoice", accounts.invoice),
-      getAccountMeta("vault", accounts.vault),
-      getAccountMeta("payerToken", accounts.payerToken),
-      getAccountMeta("mint", accounts.mint),
-      getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getRefundInstructionDataEncoder().encode({}),
     programAddress,
@@ -390,22 +158,6 @@ export function getRefundInstruction<
     ResolvedInstructionAccountMeta<
       TAccountInvoice,
       InstructionAccountInputAddress<TAccountInvoice>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountVault,
-      InstructionAccountInputAddress<TAccountVault>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountMint,
-      InstructionAccountInputAddress<TAccountMint>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountTokenProgram,
-      InstructionAccountInputAddress<TAccountTokenProgram>
     >
   >);
 }
@@ -418,10 +170,6 @@ export type ParsedRefundInstruction<
   accounts: {
     caller: TAccountMetas[0];
     invoice: TAccountMetas[1];
-    vault: TAccountMetas[2];
-    payerToken: TAccountMetas[3];
-    mint: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
   };
   data: RefundInstructionData;
 };
@@ -434,12 +182,12 @@ export function parseRefundInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedRefundInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 2) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 6,
+        expectedAccountMetas: 2,
       },
     );
   }
@@ -451,14 +199,7 @@ export function parseRefundInstruction<
   };
   return {
     programAddress: instruction.programAddress,
-    accounts: {
-      caller: getNextAccount(),
-      invoice: getNextAccount(),
-      vault: getNextAccount(),
-      payerToken: getNextAccount(),
-      mint: getNextAccount(),
-      tokenProgram: getNextAccount(),
-    },
+    accounts: { caller: getNextAccount(), invoice: getNextAccount() },
     data: getRefundInstructionDataDecoder().decode(instruction.data),
   };
 }

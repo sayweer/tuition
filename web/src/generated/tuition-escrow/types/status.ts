@@ -22,6 +22,7 @@ export enum Status {
   Released,
   Refunded,
   Resolved,
+  Expired,
 }
 
 export type StatusArgs = Status;

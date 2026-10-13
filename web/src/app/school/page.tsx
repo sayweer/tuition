@@ -11,8 +11,9 @@ import {
   getAcknowledgeInstructionAsync,
   getCreateInvoiceInstructionAsync,
 } from "@/generated/tuition-escrow";
+import { FundingBar } from "@/components/funding";
 import { ConnectPrompt, Countdown, Field, StatusBadge, TxNotice } from "@/components/ui";
-import { MINTS, PAYMENT_WINDOWS, mintSymbol } from "@/lib/constants";
+import { FUNDING_WINDOWS, MINTS, PAYMENT_WINDOWS, mintSymbol } from "@/lib/constants";
 import {
   Status,
   ataOf,
@@ -28,7 +29,7 @@ import {
   tokenProgramOf,
   type InvoiceRow,
 } from "@/lib/escrow";
-import { useApp, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Copy = Record<
@@ -54,6 +55,10 @@ type Copy = Record<
   | "currency"
   | "payoutWindow"
   | "windowHint"
+  | "fundingWindow"
+  | "fundingHint"
+  | "partner"
+  | "partnerHint"
   | "issuing"
   | "issue"
   | "issued"
@@ -71,6 +76,7 @@ type Copy = Record<
   string
 > & {
   notRegistered: (addr: string) => string;
+  partnerOption: (n: number, addr: string) => string;
   amountHint: (symbol: string) => string;
 };
 
@@ -91,7 +97,7 @@ const T: Dict<Copy> = {
     financeOffice: "Finance office",
     newRequest: "New tuition request",
     amount: "Amount",
-    amountHint: (symbol) => `In ${symbol}. The family locks exactly this.`,
+    amountHint: (symbol) => `In ${symbol}. The family, sponsors and donors can fill it together.`,
     liraQuote: "Lira quote",
     liraHint: "Shown to the family; the payout partner pays this in TRY.",
     term: "Term",
@@ -100,7 +106,12 @@ const T: Dict<Copy> = {
     studentPlaceholder: "e.g. 2026-10482",
     currency: "Currency",
     payoutWindow: "Payout window",
-    windowHint: "Starts when the family locks the money.",
+    windowHint: "Starts once the full amount is in escrow.",
+    fundingWindow: "Collecting period",
+    fundingHint: "If the amount is not raised by then, every contribution goes back.",
+    partner: "Payout partner",
+    partnerHint: "The licensed company that pays you in lira.",
+    partnerOption: (n, addr) => `Licensed partner ${n} (${addr})`,
     issuing: "Issuing…",
     issue: "Issue request",
     issued: "Request issued.",
@@ -132,7 +143,7 @@ const T: Dict<Copy> = {
     financeOffice: "Mali işler ofisi",
     newRequest: "Yeni harç talebi",
     amount: "Tutar",
-    amountHint: (symbol) => `${symbol} cinsinden. Aile tam olarak bu tutarı kilitler.`,
+    amountHint: (symbol) => `${symbol} cinsinden. Aile, destekçiler ve bağışçılar birlikte tamamlayabilir.`,
     liraQuote: "Lira karşılığı",
     liraHint: "Aileye gösterilir; ödeme ortağı bu tutarı TL olarak öder.",
     term: "Dönem",
@@ -141,7 +152,12 @@ const T: Dict<Copy> = {
     studentPlaceholder: "örn. 2026-10482",
     currency: "Para birimi",
     payoutWindow: "Ödeme süresi",
-    windowHint: "Aile parayı kilitlediğinde başlar.",
+    windowHint: "Tutarın tamamı emanete girdiğinde başlar.",
+    fundingWindow: "Toplama süresi",
+    fundingHint: "Tutar bu süre içinde toplanmazsa tüm katkılar geri döner.",
+    partner: "Ödeme ortağı",
+    partnerHint: "Size lira olarak ödeme yapan lisanslı şirket.",
+    partnerOption: (n, addr) => `Lisanslı ödeme ortağı ${n} (${addr})`,
     issuing: "Oluşturuluyor…",
     issue: "Talep oluştur",
     issued: "Talep oluşturuldu.",
@@ -247,11 +263,17 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
   const [studentRef, setStudentRef] = useState("");
   const [mint, setMint] = useState<Address>(MINTS[0].address);
   const [windowSecs, setWindowSecs] = useState(PAYMENT_WINDOWS[1].secs);
+  const [fundingSecs, setFundingSecs] = useState(FUNDING_WINDOWS[1].secs);
+  const config = useConfig();
+  const offices = config.data?.offices ?? [];
+  const [office, setOffice] = useState<Address | "">("");
+  const chosenOffice = office || offices[0] || "";
   const [created, setCreated] = useState<{ invoice: Address; salt: string } | null>(null);
 
   const amountBase = parseAmount(amount);
   const tryKurus = parseAmount(tryAmount, 2);
-  const valid = !!amountBase && amountBase > 0n && tryKurus !== null && studentRef.trim().length > 0;
+  const valid =
+    !!amountBase && amountBase > 0n && tryKurus !== null && studentRef.trim().length > 0 && chosenOffice !== "";
 
   async function submit() {
     const nonce = BigInt(Date.now());
@@ -260,6 +282,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
     const sig = await tx.send(async () => [
       await getCreateInvoiceInstructionAsync({
         payee: client.payer,
+        office: chosenOffice as Address,
         mint,
         tokenProgram: await tokenProgramOf(client.rpc, mint),
         nonce,
@@ -268,6 +291,7 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
         term,
         studentRefHash: await studentRefHash(invoice, studentRef, salt),
         windowSecs: BigInt(windowSecs),
+        fundingSecs: BigInt(fundingSecs),
       }),
     ]);
     if (sig) {
@@ -311,6 +335,24 @@ function CreateRequest({ me, onCreated }: { me: Address; onCreated: () => void }
             {MINTS.map((m) => (
               <option key={m.address} value={m.address}>
                 {m.label[lang]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t.partner} hint={t.partnerHint}>
+          <select value={chosenOffice} onChange={(e) => setOffice(e.target.value as Address)}>
+            {offices.map((o, i) => (
+              <option key={o} value={o}>
+                {t.partnerOption(i + 1, shortAddress(o))}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t.fundingWindow} hint={t.fundingHint}>
+          <select value={fundingSecs} onChange={(e) => setFundingSecs(Number(e.target.value))}>
+            {FUNDING_WINDOWS.map((w) => (
+              <option key={w.secs} value={w.secs}>
+                {w.label[lang]}
               </option>
             ))}
           </select>
@@ -415,6 +457,7 @@ function RequestRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }
         <StatusBadge status={inv.status} />
         {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
       </div>
+      {inv.status === Status.Open && <FundingBar inv={inv} />}
       {inv.status === Status.Funded && (
         <p className="slip-note">{t.notReported}</p>
       )}

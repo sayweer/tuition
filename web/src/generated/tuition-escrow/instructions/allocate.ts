@@ -14,6 +14,8 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -27,53 +29,60 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
-  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type WritableAccount,
+  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
   getAddressFromResolvedInstructionAccount,
+  getNonNullResolvedInstructionInput,
   type InstructionAccountInput,
   type InstructionAccountInputAddress,
   type InstructionSignerInput,
   type ResolvedInstructionAccount,
   type ResolvedInstructionAccountMeta,
 } from "@solana/kit/program-client-core";
-import { findConfigPda, findVaultPda } from "../pdas";
+import {
+  findConfigPda,
+  findContributionPda,
+  findPoolPda,
+  findPoolVaultPda,
+  findVaultPda,
+} from "../pdas";
 import { TUITION_ESCROW_PROGRAM_ADDRESS } from "../programs";
 
-export const PAY_INVOICE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  104, 6, 62, 239, 197, 206, 208, 220,
+export const ALLOCATE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  64, 38, 189, 129, 24, 157, 82, 136,
 ]);
 
-export function getPayInvoiceDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(PAY_INVOICE_DISCRIMINATOR);
+export function getAllocateDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(ALLOCATE_DISCRIMINATOR);
 }
 
-export type PayInvoiceInstruction<
+export type AllocateInstruction<
   TProgram extends string = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
-  TAccountPayer extends string | AccountMeta<string> = string,
-  TAccountOffice extends string | AccountMeta<string> = string,
+  TAccountArbiter extends string | AccountMeta<string> = string,
   TAccountConfig extends string | AccountMeta<string> = string,
   TAccountInvoice extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
-  TAccountPayerToken extends string | AccountMeta<string> = string,
+  TAccountPool extends string | AccountMeta<string> = string,
+  TAccountPoolVault extends string | AccountMeta<string> = string,
+  TAccountContribution extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountPayer extends string
-        ? ReadonlySignerAccount<TAccountPayer> &
-            AccountSignerMeta<TAccountPayer>
-        : TAccountPayer,
-      TAccountOffice extends string
-        ? ReadonlyAccount<TAccountOffice>
-        : TAccountOffice,
+      TAccountArbiter extends string
+        ? WritableSignerAccount<TAccountArbiter> &
+            AccountSignerMeta<TAccountArbiter>
+        : TAccountArbiter,
       TAccountConfig extends string
         ? ReadonlyAccount<TAccountConfig>
         : TAccountConfig,
@@ -83,99 +92,129 @@ export type PayInvoiceInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
-      TAccountPayerToken extends string
-        ? WritableAccount<TAccountPayerToken>
-        : TAccountPayerToken,
+      TAccountPool extends string
+        ? WritableAccount<TAccountPool>
+        : TAccountPool,
+      TAccountPoolVault extends string
+        ? WritableAccount<TAccountPoolVault>
+        : TAccountPoolVault,
+      TAccountContribution extends string
+        ? WritableAccount<TAccountContribution>
+        : TAccountContribution,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
 
-export type PayInvoiceInstructionData = { discriminator: ReadonlyUint8Array };
+export type AllocateInstructionData = {
+  discriminator: ReadonlyUint8Array;
+  nonce: bigint;
+  amount: bigint;
+};
 
-export type PayInvoiceInstructionDataArgs = {};
+export type AllocateInstructionDataArgs = {
+  nonce: number | bigint;
+  amount: number | bigint;
+};
 
-export function getPayInvoiceInstructionDataEncoder(): FixedSizeEncoder<PayInvoiceInstructionDataArgs> {
+export function getAllocateInstructionDataEncoder(): FixedSizeEncoder<AllocateInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
-    (value) => ({ ...value, discriminator: PAY_INVOICE_DISCRIMINATOR }),
+    getStructEncoder([
+      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
+      ["nonce", getU64Encoder()],
+      ["amount", getU64Encoder()],
+    ]),
+    (value) => ({ ...value, discriminator: ALLOCATE_DISCRIMINATOR }),
   );
 }
 
-export function getPayInvoiceInstructionDataDecoder(): FixedSizeDecoder<PayInvoiceInstructionData> {
+export function getAllocateInstructionDataDecoder(): FixedSizeDecoder<AllocateInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+    ["nonce", getU64Decoder()],
+    ["amount", getU64Decoder()],
   ]);
 }
 
-export function getPayInvoiceInstructionDataCodec(): FixedSizeCodec<
-  PayInvoiceInstructionDataArgs,
-  PayInvoiceInstructionData
+export function getAllocateInstructionDataCodec(): FixedSizeCodec<
+  AllocateInstructionDataArgs,
+  AllocateInstructionData
 > {
   return combineCodec(
-    getPayInvoiceInstructionDataEncoder(),
-    getPayInvoiceInstructionDataDecoder(),
+    getAllocateInstructionDataEncoder(),
+    getAllocateInstructionDataDecoder(),
   );
 }
 
-export type PayInvoiceAsyncInput<
-  TAccountPayer extends InstructionSignerInput = InstructionSignerInput,
-  TAccountOffice extends InstructionAccountInput = InstructionAccountInput,
+export type AllocateAsyncInput<
+  TAccountArbiter extends InstructionSignerInput = InstructionSignerInput,
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPool extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPoolVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountContribution extends InstructionAccountInput =
+    InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput =
+    InstructionAccountInput,
 > = {
-  payer: TAccountPayer;
-  office: TAccountOffice;
+  arbiter: TAccountArbiter;
   config?: TAccountConfig;
   invoice: TAccountInvoice;
   vault?: TAccountVault;
-  payerToken: TAccountPayerToken;
+  pool?: TAccountPool;
+  poolVault?: TAccountPoolVault;
+  contribution?: TAccountContribution;
   mint: TAccountMint;
   tokenProgram?: TAccountTokenProgram;
+  systemProgram?: TAccountSystemProgram;
+  nonce: AllocateInstructionDataArgs["nonce"];
+  amount: AllocateInstructionDataArgs["amount"];
 };
 
-export async function getPayInvoiceInstructionAsync<
-  TAccountPayer extends InstructionSignerInput,
-  TAccountOffice extends InstructionAccountInput,
+export async function getAllocateInstructionAsync<
+  TAccountArbiter extends InstructionSignerInput,
   TAccountConfig extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput,
+  TAccountPool extends InstructionAccountInput,
+  TAccountPoolVault extends InstructionAccountInput,
+  TAccountContribution extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: PayInvoiceAsyncInput<
-    TAccountPayer,
-    TAccountOffice,
+  input: AllocateAsyncInput<
+    TAccountArbiter,
     TAccountConfig,
     TAccountInvoice,
     TAccountVault,
-    TAccountPayerToken,
+    TAccountPool,
+    TAccountPoolVault,
+    TAccountContribution,
     TAccountMint,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  PayInvoiceInstruction<
+  AllocateInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountPayer,
-      InstructionAccountInputAddress<TAccountPayer>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountOffice,
-      InstructionAccountInputAddress<TAccountOffice>
+      TAccountArbiter,
+      InstructionAccountInputAddress<TAccountArbiter>
     >,
     ResolvedInstructionAccountMeta<
       TAccountConfig,
@@ -190,8 +229,16 @@ export async function getPayInvoiceInstructionAsync<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
+      TAccountPool,
+      InstructionAccountInputAddress<TAccountPool>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPoolVault,
+      InstructionAccountInputAddress<TAccountPoolVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountContribution,
+      InstructionAccountInputAddress<TAccountContribution>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -200,6 +247,10 @@ export async function getPayInvoiceInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >
 > {
@@ -212,8 +263,7 @@ export async function getPayInvoiceInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    payer: { value: input.payer ?? null, isSigner: true, isWritable: false },
-    office: { value: input.office ?? null, isSigner: false, isWritable: false },
+    arbiter: { value: input.arbiter ?? null, isSigner: true, isWritable: true },
     config: { value: input.config ?? null, isSigner: false, isWritable: false },
     invoice: {
       value: input.invoice ?? null,
@@ -221,8 +271,14 @@ export async function getPayInvoiceInstructionAsync<
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    payerToken: {
-      value: input.payerToken ?? null,
+    pool: { value: input.pool ?? null, isSigner: false, isWritable: true },
+    poolVault: {
+      value: input.poolVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    contribution: {
+      value: input.contribution ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -232,11 +288,19 @@ export async function getPayInvoiceInstructionAsync<
       isSigner: false,
       isWritable: false,
     },
+    systemProgram: {
+      value: input.systemProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
+
+  // Original args.
+  const args = { ...input };
 
   // Resolve default values.
   if (!accounts.config.value) {
@@ -253,33 +317,75 @@ export async function getPayInvoiceInstructionAsync<
       { programAddress },
     );
   }
+  if (!accounts.pool.value) {
+    accounts.pool.value = await findPoolPda(
+      {
+        mint: getAddressFromResolvedInstructionAccount(
+          "mint",
+          accounts.mint.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
+  if (!accounts.poolVault.value) {
+    accounts.poolVault.value = await findPoolVaultPda(
+      {
+        pool: getAddressFromResolvedInstructionAccount(
+          "pool",
+          accounts.pool.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
+  if (!accounts.contribution.value) {
+    accounts.contribution.value = await findContributionPda(
+      {
+        invoice: getAddressFromResolvedInstructionAccount(
+          "invoice",
+          accounts.invoice.value,
+        ),
+        pool: getAddressFromResolvedInstructionAccount(
+          "pool",
+          accounts.pool.value,
+        ),
+        nonce: getNonNullResolvedInstructionInput("nonce", args.nonce),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("payer", accounts.payer),
-      getAccountMeta("office", accounts.office),
+      getAccountMeta("arbiter", accounts.arbiter),
       getAccountMeta("config", accounts.config),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("payerToken", accounts.payerToken),
+      getAccountMeta("pool", accounts.pool),
+      getAccountMeta("poolVault", accounts.poolVault),
+      getAccountMeta("contribution", accounts.contribution),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getPayInvoiceInstructionDataEncoder().encode({}),
+    data: getAllocateInstructionDataEncoder().encode(
+      args as AllocateInstructionDataArgs,
+    ),
     programAddress,
-  } as PayInvoiceInstruction<
+  } as AllocateInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountPayer,
-      InstructionAccountInputAddress<TAccountPayer>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountOffice,
-      InstructionAccountInputAddress<TAccountOffice>
+      TAccountArbiter,
+      InstructionAccountInputAddress<TAccountArbiter>
     >,
     ResolvedInstructionAccountMeta<
       TAccountConfig,
@@ -294,8 +400,16 @@ export async function getPayInvoiceInstructionAsync<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
+      TAccountPool,
+      InstructionAccountInputAddress<TAccountPool>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPoolVault,
+      InstructionAccountInputAddress<TAccountPoolVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountContribution,
+      InstructionAccountInputAddress<TAccountContribution>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -304,62 +418,74 @@ export async function getPayInvoiceInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >);
 }
 
-export type PayInvoiceInput<
-  TAccountPayer extends InstructionSignerInput = InstructionSignerInput,
-  TAccountOffice extends InstructionAccountInput = InstructionAccountInput,
+export type AllocateInput<
+  TAccountArbiter extends InstructionSignerInput = InstructionSignerInput,
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPool extends InstructionAccountInput = InstructionAccountInput,
+  TAccountPoolVault extends InstructionAccountInput = InstructionAccountInput,
+  TAccountContribution extends InstructionAccountInput =
+    InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput =
+    InstructionAccountInput,
 > = {
-  payer: TAccountPayer;
-  office: TAccountOffice;
+  arbiter: TAccountArbiter;
   config: TAccountConfig;
   invoice: TAccountInvoice;
   vault: TAccountVault;
-  payerToken: TAccountPayerToken;
+  pool: TAccountPool;
+  poolVault: TAccountPoolVault;
+  contribution: TAccountContribution;
   mint: TAccountMint;
   tokenProgram?: TAccountTokenProgram;
+  systemProgram?: TAccountSystemProgram;
+  nonce: AllocateInstructionDataArgs["nonce"];
+  amount: AllocateInstructionDataArgs["amount"];
 };
 
-export function getPayInvoiceInstruction<
-  TAccountPayer extends InstructionSignerInput,
-  TAccountOffice extends InstructionAccountInput,
+export function getAllocateInstruction<
+  TAccountArbiter extends InstructionSignerInput,
   TAccountConfig extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
-  TAccountPayerToken extends InstructionAccountInput,
+  TAccountPool extends InstructionAccountInput,
+  TAccountPoolVault extends InstructionAccountInput,
+  TAccountContribution extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
+  TAccountSystemProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
 >(
-  input: PayInvoiceInput<
-    TAccountPayer,
-    TAccountOffice,
+  input: AllocateInput<
+    TAccountArbiter,
     TAccountConfig,
     TAccountInvoice,
     TAccountVault,
-    TAccountPayerToken,
+    TAccountPool,
+    TAccountPoolVault,
+    TAccountContribution,
     TAccountMint,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): PayInvoiceInstruction<
+): AllocateInstruction<
   TProgramAddress,
   ResolvedInstructionAccountMeta<
-    TAccountPayer,
-    InstructionAccountInputAddress<TAccountPayer>
-  >,
-  ResolvedInstructionAccountMeta<
-    TAccountOffice,
-    InstructionAccountInputAddress<TAccountOffice>
+    TAccountArbiter,
+    InstructionAccountInputAddress<TAccountArbiter>
   >,
   ResolvedInstructionAccountMeta<
     TAccountConfig,
@@ -374,8 +500,16 @@ export function getPayInvoiceInstruction<
     InstructionAccountInputAddress<TAccountVault>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountPayerToken,
-    InstructionAccountInputAddress<TAccountPayerToken>
+    TAccountPool,
+    InstructionAccountInputAddress<TAccountPool>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountPoolVault,
+    InstructionAccountInputAddress<TAccountPoolVault>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountContribution,
+    InstructionAccountInputAddress<TAccountContribution>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -384,6 +518,10 @@ export function getPayInvoiceInstruction<
   ResolvedInstructionAccountMeta<
     TAccountTokenProgram,
     InstructionAccountInputAddress<TAccountTokenProgram>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountSystemProgram,
+    InstructionAccountInputAddress<TAccountSystemProgram>
   >
 > {
   // Program address.
@@ -395,8 +533,7 @@ export function getPayInvoiceInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    payer: { value: input.payer ?? null, isSigner: true, isWritable: false },
-    office: { value: input.office ?? null, isSigner: false, isWritable: false },
+    arbiter: { value: input.arbiter ?? null, isSigner: true, isWritable: true },
     config: { value: input.config ?? null, isSigner: false, isWritable: false },
     invoice: {
       value: input.invoice ?? null,
@@ -404,8 +541,14 @@ export function getPayInvoiceInstruction<
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    payerToken: {
-      value: input.payerToken ?? null,
+    pool: { value: input.pool ?? null, isSigner: false, isWritable: true },
+    poolVault: {
+      value: input.poolVault ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
+    contribution: {
+      value: input.contribution ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -415,40 +558,52 @@ export function getPayInvoiceInstruction<
       isSigner: false,
       isWritable: false,
     },
+    systemProgram: {
+      value: input.systemProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   return Object.freeze({
     accounts: [
-      getAccountMeta("payer", accounts.payer),
-      getAccountMeta("office", accounts.office),
+      getAccountMeta("arbiter", accounts.arbiter),
       getAccountMeta("config", accounts.config),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("payerToken", accounts.payerToken),
+      getAccountMeta("pool", accounts.pool),
+      getAccountMeta("poolVault", accounts.poolVault),
+      getAccountMeta("contribution", accounts.contribution),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getPayInvoiceInstructionDataEncoder().encode({}),
+    data: getAllocateInstructionDataEncoder().encode(
+      args as AllocateInstructionDataArgs,
+    ),
     programAddress,
-  } as PayInvoiceInstruction<
+  } as AllocateInstruction<
     TProgramAddress,
     ResolvedInstructionAccountMeta<
-      TAccountPayer,
-      InstructionAccountInputAddress<TAccountPayer>
-    >,
-    ResolvedInstructionAccountMeta<
-      TAccountOffice,
-      InstructionAccountInputAddress<TAccountOffice>
+      TAccountArbiter,
+      InstructionAccountInputAddress<TAccountArbiter>
     >,
     ResolvedInstructionAccountMeta<
       TAccountConfig,
@@ -463,8 +618,16 @@ export function getPayInvoiceInstruction<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountPayerToken,
-      InstructionAccountInputAddress<TAccountPayerToken>
+      TAccountPool,
+      InstructionAccountInputAddress<TAccountPool>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountPoolVault,
+      InstructionAccountInputAddress<TAccountPoolVault>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountContribution,
+      InstructionAccountInputAddress<TAccountContribution>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -473,42 +636,48 @@ export function getPayInvoiceInstruction<
     ResolvedInstructionAccountMeta<
       TAccountTokenProgram,
       InstructionAccountInputAddress<TAccountTokenProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountSystemProgram,
+      InstructionAccountInputAddress<TAccountSystemProgram>
     >
   >);
 }
 
-export type ParsedPayInvoiceInstruction<
+export type ParsedAllocateInstruction<
   TProgram extends string = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    payer: TAccountMetas[0];
-    office: TAccountMetas[1];
-    config: TAccountMetas[2];
-    invoice: TAccountMetas[3];
-    vault: TAccountMetas[4];
-    payerToken: TAccountMetas[5];
-    mint: TAccountMetas[6];
-    tokenProgram: TAccountMetas[7];
+    arbiter: TAccountMetas[0];
+    config: TAccountMetas[1];
+    invoice: TAccountMetas[2];
+    vault: TAccountMetas[3];
+    pool: TAccountMetas[4];
+    poolVault: TAccountMetas[5];
+    contribution: TAccountMetas[6];
+    mint: TAccountMetas[7];
+    tokenProgram: TAccountMetas[8];
+    systemProgram: TAccountMetas[9];
   };
-  data: PayInvoiceInstructionData;
+  data: AllocateInstructionData;
 };
 
-export function parsePayInvoiceInstruction<
+export function parseAllocateInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedPayInvoiceInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+): ParsedAllocateInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 10) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 10,
       },
     );
   }
@@ -521,15 +690,17 @@ export function parsePayInvoiceInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      payer: getNextAccount(),
-      office: getNextAccount(),
+      arbiter: getNextAccount(),
       config: getNextAccount(),
       invoice: getNextAccount(),
       vault: getNextAccount(),
-      payerToken: getNextAccount(),
+      pool: getNextAccount(),
+      poolVault: getNextAccount(),
+      contribution: getNextAccount(),
       mint: getNextAccount(),
       tokenProgram: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
-    data: getPayInvoiceInstructionDataDecoder().decode(instruction.data),
+    data: getAllocateInstructionDataDecoder().decode(instruction.data),
   };
 }

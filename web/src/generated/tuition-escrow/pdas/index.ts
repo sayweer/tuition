@@ -7,7 +7,11 @@
  */
 
 export * from "./config";
+export * from "./contributeContribution";
+export * from "./contribution";
 export * from "./invoice";
 export * from "./payee";
 export * from "./payeeRecord";
+export * from "./pool";
+export * from "./poolVault";
 export * from "./vault";

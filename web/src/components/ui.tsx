@@ -14,25 +14,28 @@ const TONE: Record<Status, Tone> = {
   [Status.Released]: "ok",
   [Status.Refunded]: "back",
   [Status.Resolved]: "info",
+  [Status.Expired]: "back",
 };
 
 /** The chip carries a short ink stamp; the rest of the sentence sits next to it. */
 const STATUS_COPY: Dict<Record<Status, { stamp: string; rest: string }>> = {
   en: {
-    [Status.Open]: { stamp: "Issued", rest: "waiting for the family" },
+    [Status.Open]: { stamp: "Open", rest: "collecting contributions" },
     [Status.Funded]: { stamp: "Locked", rest: "waiting for the payout partner" },
     [Status.Paid]: { stamp: "Lira sent", rest: "waiting for the university" },
     [Status.Released]: { stamp: "Received", rest: "by the university" },
     [Status.Refunded]: { stamp: "Refunded", rest: "to the family" },
     [Status.Resolved]: { stamp: "Settled", rest: "by the arbiter" },
+    [Status.Expired]: { stamp: "Not funded", rest: "in time; gifts go back" },
   },
   tr: {
-    [Status.Open]: { stamp: "Açıldı", rest: "aile bekleniyor" },
+    [Status.Open]: { stamp: "Açık", rest: "katkı toplanıyor" },
     [Status.Funded]: { stamp: "Kilitlendi", rest: "ödeme ortağı bekleniyor" },
     [Status.Paid]: { stamp: "Lira gönderildi", rest: "üniversite bekleniyor" },
     [Status.Released]: { stamp: "Tahsil edildi", rest: "üniversite onayladı" },
     [Status.Refunded]: { stamp: "İade edildi", rest: "aileye" },
     [Status.Resolved]: { stamp: "Karara bağlandı", rest: "hakem tarafından" },
+    [Status.Expired]: { stamp: "Tamamlanmadı", rest: "süresinde; katkılar geri döner" },
   },
 };
 
@@ -140,13 +143,13 @@ type StepCopy = { step: HistoryEntry["step"]; text: string };
 const SEQUENCE: Dict<StepCopy[]> = {
   en: [
     { step: "Created", text: "University issued the request" },
-    { step: "Locked", text: "Family locked the tuition in escrow" },
+    { step: "Contributed", text: "Tuition fully funded in escrow" },
     { step: "TRY sent", text: "Payout partner sent lira to the university's bank" },
     { step: "Signed", text: "University confirmed receipt with its own key" },
   ],
   tr: [
     { step: "Created", text: "Üniversite talebi açtı" },
-    { step: "Locked", text: "Aile harcı emanet hesabına kilitledi" },
+    { step: "Contributed", text: "Harç emanet hesabında tamamlandı" },
     { step: "TRY sent", text: "Ödeme ortağı lirayı üniversitenin bankasına gönderdi" },
     { step: "Signed", text: "Üniversite tahsilatı kendi anahtarıyla onayladı" },
   ],
@@ -156,10 +159,12 @@ const TERMINAL: Dict<Partial<Record<Status, StepCopy>>> = {
   en: {
     [Status.Refunded]: { step: "Refunded", text: "Deadline passed without payout: refunded to the family" },
     [Status.Resolved]: { step: "Resolved", text: "Arbiter settled the dispute" },
+    [Status.Expired]: { step: "Expired", text: "Not fully funded in time: contributions go back" },
   },
   tr: {
     [Status.Refunded]: { step: "Refunded", text: "Süre ödeme yapılmadan doldu: aileye iade edildi" },
     [Status.Resolved]: { step: "Resolved", text: "Hakem anlaşmazlığı karara bağladı" },
+    [Status.Expired]: { step: "Expired", text: "Süresinde tamamlanmadı: katkılar geri döner" },
   },
 };
 
@@ -170,11 +175,12 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
   // A step counts as done only when the invoice account itself says so; history only adds the link.
   const reached: Record<HistoryEntry["step"], boolean> = {
     Created: true,
-    Locked: invoice.fundedAt > 0n,
+    Contributed: invoice.fundedAt > 0n,
     "TRY sent": invoice.paidAt > 0n,
     Signed: invoice.status === Status.Released,
     Refunded: invoice.status === Status.Refunded,
     Resolved: invoice.status === Status.Resolved,
+    Expired: invoice.status === Status.Expired,
   };
   const terminal = TERMINAL[lang][invoice.status];
   // Once settled, steps that never happened (e.g. confirmed before the partner reported) are dropped.
@@ -187,7 +193,8 @@ export function Timeline({ invoice, history }: { invoice: Invoice; history: Hist
     <ol className="timeline">
       {steps.map((s, i) => {
         const done = reached[s.step];
-        const entry = done ? history?.find((h) => h.step === s.step) : undefined;
+        // several contributions may exist; the one that completed the amount is the latest
+        const entry = done ? history?.findLast((h) => h.step === s.step) : undefined;
         return (
           <li key={s.step} className={done ? "done" : "todo"}>
             <span className="timeline-index" aria-hidden>

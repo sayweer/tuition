@@ -1029,3 +1029,109 @@
     animation: none !important;
   }
 }
+
+/* ------------------------------------------- funding: progress and contributions */
+.desk-page .funding {
+  margin-top: 16px;
+}
+.desk-page .funding-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(29, 26, 22, 0.1);
+  box-shadow: inset 0 1px 2px rgba(29, 26, 22, 0.18);
+  overflow: hidden;
+}
+.desk-page .funding-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ok);
+  transition: width 600ms var(--e-land);
+}
+.desk-page .funding-text {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.desk-page .funding-text b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.desk-page .funding-time {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.desk-page .givers {
+  margin-top: 14px;
+  list-style: none;
+  padding: 0;
+}
+.desk-page .givers li {
+  padding: 12px 0;
+  border-top: 1px dashed rgba(29, 26, 22, 0.28);
+}
+.desk-page .givers li:last-child {
+  border-bottom: 1px dashed rgba(29, 26, 22, 0.28);
+}
+.desk-page .giver-main {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.desk-page .giver-who {
+  font-weight: 700;
+}
+.desk-page .giver-who .hash {
+  margin-left: 6px;
+  font-weight: 400;
+}
+.desk-page .giver-amount {
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.desk-page .giver-amount small {
+  font-size: 0.75em;
+  color: var(--ink-soft);
+}
+.desk-page .giver-meta {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.desk-page .givers .notice {
+  margin-top: 8px;
+}
+.desk-page .givers .btn {
+  margin-top: 10px;
+}
+.desk-page .btn.small {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+.desk-page .pool-desk {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 36px;
+}
+.desk-page .pool-desk > .tag,
+.desk-page .pool-desk > h3.tag {
+  margin-top: 6px;
+}
+.desk-page .rcpt-givers {
+  max-width: 760px;
+  margin: 28px auto 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-page .funding-bar > span {
+    transition: none;
+  }
+}

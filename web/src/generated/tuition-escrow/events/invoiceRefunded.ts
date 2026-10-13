@@ -19,8 +19,6 @@ import {
   getHiddenPrefixEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
@@ -37,27 +35,15 @@ export function getInvoiceRefundedEventDiscriminatorBytes(): ReadonlyUint8Array 
   );
 }
 
-export type InvoiceRefundedEvent = {
-  invoice: Address;
-  payer: Address;
-  amount: bigint;
-  caller: Address;
-};
+export type InvoiceRefundedEvent = { invoice: Address; caller: Address };
 
-export type InvoiceRefundedEventArgs = {
-  invoice: Address;
-  payer: Address;
-  amount: number | bigint;
-  caller: Address;
-};
+export type InvoiceRefundedEventArgs = InvoiceRefundedEvent;
 
 /** Gets the encoder for {@link InvoiceRefundedEventArgs} event data. */
 export function getInvoiceRefundedEventEncoder(): FixedSizeEncoder<InvoiceRefundedEventArgs> {
   return getHiddenPrefixEncoder(
     getStructEncoder([
       ["invoice", getAddressEncoder()],
-      ["payer", getAddressEncoder()],
-      ["amount", getU64Encoder()],
       ["caller", getAddressEncoder()],
     ]),
     [getConstantEncoder(INVOICE_REFUNDED_EVENT_DISCRIMINATOR)],
@@ -69,8 +55,6 @@ export function getInvoiceRefundedEventDecoder(): FixedSizeDecoder<InvoiceRefund
   return getHiddenPrefixDecoder(
     getStructDecoder([
       ["invoice", getAddressDecoder()],
-      ["payer", getAddressDecoder()],
-      ["amount", getU64Decoder()],
       ["caller", getAddressDecoder()],
     ]),
     [getConstantDecoder(INVOICE_REFUNDED_EVENT_DISCRIMINATOR)],

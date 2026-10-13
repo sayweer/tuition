@@ -19,6 +19,8 @@ import {
   getConstantEncoder,
   getHiddenPrefixDecoder,
   getHiddenPrefixEncoder,
+  getI64Decoder,
+  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
   getU32Decoder,
@@ -44,21 +46,25 @@ export function getInvoiceCreatedEventDiscriminatorBytes(): ReadonlyUint8Array {
 export type InvoiceCreatedEvent = {
   invoice: Address;
   payee: Address;
+  office: Address;
   mint: Address;
   amount: bigint;
   amountTryKurus: bigint;
   term: number;
   studentRefHash: ReadonlyUint8Array;
+  fundingDeadline: bigint;
 };
 
 export type InvoiceCreatedEventArgs = {
   invoice: Address;
   payee: Address;
+  office: Address;
   mint: Address;
   amount: number | bigint;
   amountTryKurus: number | bigint;
   term: number;
   studentRefHash: ReadonlyUint8Array;
+  fundingDeadline: number | bigint;
 };
 
 /** Gets the encoder for {@link InvoiceCreatedEventArgs} event data. */
@@ -67,11 +73,13 @@ export function getInvoiceCreatedEventEncoder(): FixedSizeEncoder<InvoiceCreated
     getStructEncoder([
       ["invoice", getAddressEncoder()],
       ["payee", getAddressEncoder()],
+      ["office", getAddressEncoder()],
       ["mint", getAddressEncoder()],
       ["amount", getU64Encoder()],
       ["amountTryKurus", getU64Encoder()],
       ["term", getU32Encoder()],
       ["studentRefHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["fundingDeadline", getI64Encoder()],
     ]),
     [getConstantEncoder(INVOICE_CREATED_EVENT_DISCRIMINATOR)],
   );
@@ -83,11 +91,13 @@ export function getInvoiceCreatedEventDecoder(): FixedSizeDecoder<InvoiceCreated
     getStructDecoder([
       ["invoice", getAddressDecoder()],
       ["payee", getAddressDecoder()],
+      ["office", getAddressDecoder()],
       ["mint", getAddressDecoder()],
       ["amount", getU64Decoder()],
       ["amountTryKurus", getU64Decoder()],
       ["term", getU32Decoder()],
       ["studentRefHash", fixDecoderSize(getBytesDecoder(), 32)],
+      ["fundingDeadline", getI64Decoder()],
     ]),
     [getConstantDecoder(INVOICE_CREATED_EVENT_DISCRIMINATOR)],
   );

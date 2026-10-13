@@ -34,6 +34,14 @@ export const PAYMENT_WINDOWS: { secs: number; label: Record<"en" | "tr", string>
   { secs: 3 * 24 * 60 * 60, label: { en: "3 days", tr: "3 gün" } },
 ];
 
+/** How long a request collects contributions before it fails and everything goes back. */
+export const FUNDING_WINDOWS: { secs: number; label: Record<"en" | "tr", string> }[] = [
+  { secs: 2 * 60, label: { en: "2 minutes (demo)", tr: "2 dakika (demo)" } },
+  { secs: 60 * 60, label: { en: "1 hour", tr: "1 saat" } },
+  { secs: 7 * 24 * 60 * 60, label: { en: "7 days", tr: "7 gün" } },
+  { secs: 30 * 24 * 60 * 60, label: { en: "30 days", tr: "30 gün" } },
+];
+
 export function explorerTx(signature: string): string {
   return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 }

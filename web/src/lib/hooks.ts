@@ -6,7 +6,7 @@ import { useConnectedWallet } from "@solana/kit-plugin-wallet/react";
 import { useClient } from "@solana/react";
 import useSWR from "swr";
 import type { AppClient } from "@/app/providers";
-import { describeError, fetchConfig, fetchInvoice, fetchPayeeName, invoiceHistory } from "./escrow";
+import { describeError, fetchConfig, fetchInvoice, fetchPayeeName, fetchPool, invoiceHistory, listContributions } from "./escrow";
 import { useLang } from "./i18n";
 
 const REFRESH_MS = 4000;
@@ -47,6 +47,18 @@ export function useInvoice(invoice: Address | null) {
   return useSWR(invoice ? ["invoice", invoice] : null, () => fetchInvoice(rpc, invoice as Address), {
     refreshInterval: REFRESH_MS,
   });
+}
+
+export function useContributions(invoice: Address | null, refreshKey: unknown) {
+  const { rpc } = useApp();
+  return useSWR(invoice ? ["contributions", invoice, String(refreshKey)] : null, () =>
+    listContributions(rpc, invoice as Address),
+  );
+}
+
+export function usePool(mint: Address | null | undefined) {
+  const { rpc } = useApp();
+  return useSWR(mint ? ["pool", mint] : null, () => fetchPool(rpc, mint as Address), { refreshInterval: REFRESH_MS });
 }
 
 export function useHistory(invoice: Address | null, refreshKey: unknown) {

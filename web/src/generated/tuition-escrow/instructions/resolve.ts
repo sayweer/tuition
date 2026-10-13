@@ -59,7 +59,7 @@ export type ResolveInstruction<
   TAccountConfig extends string | AccountMeta<string> = string,
   TAccountInvoice extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
-  TAccountDestination extends string | AccountMeta<string> = string,
+  TAccountOfficeToken extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -81,9 +81,9 @@ export type ResolveInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
-      TAccountDestination extends string
-        ? WritableAccount<TAccountDestination>
-        : TAccountDestination,
+      TAccountOfficeToken extends string
+        ? WritableAccount<TAccountOfficeToken>
+        : TAccountOfficeToken,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
@@ -133,7 +133,7 @@ export type ResolveAsyncInput<
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountDestination extends InstructionAccountInput = InstructionAccountInput,
+  TAccountOfficeToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -142,8 +142,7 @@ export type ResolveAsyncInput<
   config?: TAccountConfig;
   invoice: TAccountInvoice;
   vault?: TAccountVault;
-  /** Owner is checked against the ruling (office or payer) in the handler. */
-  destination: TAccountDestination;
+  officeToken: TAccountOfficeToken;
   mint: TAccountMint;
   tokenProgram?: TAccountTokenProgram;
   toOffice: ResolveInstructionDataArgs["toOffice"];
@@ -154,7 +153,7 @@ export async function getResolveInstructionAsync<
   TAccountConfig extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
-  TAccountDestination extends InstructionAccountInput,
+  TAccountOfficeToken extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
@@ -164,7 +163,7 @@ export async function getResolveInstructionAsync<
     TAccountConfig,
     TAccountInvoice,
     TAccountVault,
-    TAccountDestination,
+    TAccountOfficeToken,
     TAccountMint,
     TAccountTokenProgram
   >,
@@ -189,8 +188,8 @@ export async function getResolveInstructionAsync<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountDestination,
-      InstructionAccountInputAddress<TAccountDestination>
+      TAccountOfficeToken,
+      InstructionAccountInputAddress<TAccountOfficeToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -223,8 +222,8 @@ export async function getResolveInstructionAsync<
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    destination: {
-      value: input.destination ?? null,
+    officeToken: {
+      value: input.officeToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -269,7 +268,7 @@ export async function getResolveInstructionAsync<
       getAccountMeta("config", accounts.config),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("destination", accounts.destination),
+      getAccountMeta("officeToken", accounts.officeToken),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -296,8 +295,8 @@ export async function getResolveInstructionAsync<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountDestination,
-      InstructionAccountInputAddress<TAccountDestination>
+      TAccountOfficeToken,
+      InstructionAccountInputAddress<TAccountOfficeToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -315,7 +314,7 @@ export type ResolveInput<
   TAccountConfig extends InstructionAccountInput = InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput = InstructionAccountInput,
   TAccountVault extends InstructionAccountInput = InstructionAccountInput,
-  TAccountDestination extends InstructionAccountInput = InstructionAccountInput,
+  TAccountOfficeToken extends InstructionAccountInput = InstructionAccountInput,
   TAccountMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -324,8 +323,7 @@ export type ResolveInput<
   config: TAccountConfig;
   invoice: TAccountInvoice;
   vault: TAccountVault;
-  /** Owner is checked against the ruling (office or payer) in the handler. */
-  destination: TAccountDestination;
+  officeToken: TAccountOfficeToken;
   mint: TAccountMint;
   tokenProgram?: TAccountTokenProgram;
   toOffice: ResolveInstructionDataArgs["toOffice"];
@@ -336,7 +334,7 @@ export function getResolveInstruction<
   TAccountConfig extends InstructionAccountInput,
   TAccountInvoice extends InstructionAccountInput,
   TAccountVault extends InstructionAccountInput,
-  TAccountDestination extends InstructionAccountInput,
+  TAccountOfficeToken extends InstructionAccountInput,
   TAccountMint extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
   TProgramAddress extends Address = typeof TUITION_ESCROW_PROGRAM_ADDRESS,
@@ -346,7 +344,7 @@ export function getResolveInstruction<
     TAccountConfig,
     TAccountInvoice,
     TAccountVault,
-    TAccountDestination,
+    TAccountOfficeToken,
     TAccountMint,
     TAccountTokenProgram
   >,
@@ -370,8 +368,8 @@ export function getResolveInstruction<
     InstructionAccountInputAddress<TAccountVault>
   >,
   ResolvedInstructionAccountMeta<
-    TAccountDestination,
-    InstructionAccountInputAddress<TAccountDestination>
+    TAccountOfficeToken,
+    InstructionAccountInputAddress<TAccountOfficeToken>
   >,
   ResolvedInstructionAccountMeta<
     TAccountMint,
@@ -403,8 +401,8 @@ export function getResolveInstruction<
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isSigner: false, isWritable: true },
-    destination: {
-      value: input.destination ?? null,
+    officeToken: {
+      value: input.officeToken ?? null,
       isSigner: false,
       isWritable: true,
     },
@@ -435,7 +433,7 @@ export function getResolveInstruction<
       getAccountMeta("config", accounts.config),
       getAccountMeta("invoice", accounts.invoice),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("destination", accounts.destination),
+      getAccountMeta("officeToken", accounts.officeToken),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -462,8 +460,8 @@ export function getResolveInstruction<
       InstructionAccountInputAddress<TAccountVault>
     >,
     ResolvedInstructionAccountMeta<
-      TAccountDestination,
-      InstructionAccountInputAddress<TAccountDestination>
+      TAccountOfficeToken,
+      InstructionAccountInputAddress<TAccountOfficeToken>
     >,
     ResolvedInstructionAccountMeta<
       TAccountMint,
@@ -486,8 +484,7 @@ export type ParsedResolveInstruction<
     config: TAccountMetas[1];
     invoice: TAccountMetas[2];
     vault: TAccountMetas[3];
-    /** Owner is checked against the ruling (office or payer) in the handler. */
-    destination: TAccountMetas[4];
+    officeToken: TAccountMetas[4];
     mint: TAccountMetas[5];
     tokenProgram: TAccountMetas[6];
   };
@@ -524,7 +521,7 @@ export function parseResolveInstruction<
       config: getNextAccount(),
       invoice: getNextAccount(),
       vault: getNextAccount(),
-      destination: getNextAccount(),
+      officeToken: getNextAccount(),
       mint: getNextAccount(),
       tokenProgram: getNextAccount(),
     },

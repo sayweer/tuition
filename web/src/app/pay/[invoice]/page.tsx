@@ -5,25 +5,26 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { isAddress, type Address } from "@solana/kit";
 import useSWR from "swr";
-import { getCreateAssociatedTokenIdempotentInstructionAsync } from "@solana-program/token-2022";
-import { getPayInvoiceInstructionAsync, getRefundInstructionAsync } from "@/generated/tuition-escrow";
-import { ConnectPrompt, Countdown, DeskNote, Field, StatusBadge, Timeline, TxNotice, useIsExpired } from "@/components/ui";
+import { CloseFailed, Contributions, FundingBar } from "@/components/funding";
+import { ConnectPrompt, Countdown, DeskNote, Field, StatusBadge, Timeline, TxNotice } from "@/components/ui";
+import { contributeIxs } from "@/lib/actions";
 import { mintSymbol } from "@/lib/constants";
 import {
   Status,
-  ataOf,
   formatAmount,
   formatTerm,
   formatTry,
-  shortAddress,
+  isFundingOpen,
   linkSalt,
+  parseAmount,
+  remainingOf,
+  shortAddress,
   studentRefHash,
   tokenBalance,
-  tokenProgramOf,
   toHex,
   type Invoice,
 } from "@/lib/escrow";
-import { useApp, useConfig, useHistory, useInvoice, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
+import { useApp, useHistory, useInvoice, useNow, usePayeeName, useSendTx, useWalletAddress, type TxState } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Tx = ReturnType<typeof useSendTx>;
@@ -39,7 +40,6 @@ type Copy = Record<
   | "to"
   | "toFamily"
   | "locked"
-  | "refunded"
   | "whereMoney"
   | "progress"
   | "openReceipt"
@@ -52,26 +52,23 @@ type Copy = Record<
   | "yourPart"
   | "lockTitle"
   | "lockText"
+  | "shareText"
   | "connectPay"
+  | "amount"
+  | "amountHint"
+  | "badAmount"
   | "partner"
-  | "partnerHint"
   | "balance"
   | "usdgPre"
   | "usdgPost"
   | "askAdmin"
-  | "locking"
-  | "deadlinePassed"
-  | "refundTitle"
-  | "refundText"
-  | "refunding"
-  | "refund"
-  | "connectRefund",
+  | "locking",
   string
 > & {
   letterSub: (term: string, lira: string) => string;
-  partnerOption: (n: number, addr: string) => string;
   notEnough: (symbol: string) => string;
   lock: (amount: string, symbol: string) => string;
+  tooMuch: (max: string, symbol: string) => string;
 };
 
 const T: Dict<Copy> = {
@@ -86,8 +83,7 @@ const T: Dict<Copy> = {
     to: "To",
     toFamily: "the student's family",
     letterSub: (term, lira) => `${term} tuition, paid to the university as ${lira}`,
-    locked: "Locked in escrow.",
-    refunded: "Refunded to the family.",
+    locked: "Your payment is in escrow.",
     whereMoney: "Where the money is",
     progress: "Progress",
     openReceipt: "Open the receipt",
@@ -98,27 +94,24 @@ const T: Dict<Copy> = {
     noMatch: "It does not match. Ask the university before you pay.",
     noKey: "Open the exact link the university sent you; it carries the key for this check.",
     yourPart: "Your part",
-    lockTitle: "Lock the tuition",
+    lockTitle: "Pay the tuition",
     lockText:
-      "The money goes into escrow, not to anyone. It is released to the payout partner only after the university confirms the lira arrived. If that has not happened by the deadline, it comes back to you.",
+      "The money goes into escrow, not to anyone. It is released only after the university confirms the lira arrived. If the request does not go through, your payment comes back to your wallet.",
+    shareText:
+      "You can pay all of it or only a part. Relatives or a sponsor can add the rest with this same link.",
     connectPay: "Connect your wallet to pay.",
+    amount: "Amount",
+    amountHint: "Up to what is still missing.",
+    badAmount: "Enter an amount above zero.",
+    tooMuch: (max, symbol) => `Only ${max} ${symbol} is still missing.`,
     partner: "Payout partner",
-    partnerHint: "A licensed company that pays the university in lira.",
-    partnerOption: (n, addr) => `Licensed partner ${n} (${addr})`,
     balance: "Your balance",
     notEnough: (symbol) => `Not enough ${symbol}.`,
     usdgPre: "Get test USDG at",
     usdgPost: ".",
     askAdmin: "Ask the demo admin for test dollars.",
-    locking: "Locking…",
-    lock: (amount, symbol) => `Lock ${amount} ${symbol}`,
-    deadlinePassed: "Deadline passed",
-    refundTitle: "The deadline passed with no payout",
-    refundText:
-      "The payout partner never reported sending lira. Anyone can return the full amount to the family wallet.",
-    refunding: "Refunding…",
-    refund: "Refund to the family",
-    connectRefund: "Connect any wallet to send the refund.",
+    locking: "Paying…",
+    lock: (amount, symbol) => `Pay ${amount} ${symbol} into escrow`,
   },
   tr: {
     invalid: "Bu ödeme bağlantısı geçerli değil.",
@@ -131,8 +124,7 @@ const T: Dict<Copy> = {
     to: "Alıcı",
     toFamily: "öğrencinin ailesi",
     letterSub: (term, lira) => `${term} dönemi harcı; üniversiteye ${lira} olarak ödenir`,
-    locked: "Emanet hesabına kilitlendi.",
-    refunded: "Aileye iade edildi.",
+    locked: "Ödemeniz emanet hesabında.",
     whereMoney: "Para nerede",
     progress: "Süreç",
     openReceipt: "Makbuzu aç",
@@ -143,27 +135,24 @@ const T: Dict<Copy> = {
     noMatch: "Eşleşmiyor. Ödeme yapmadan önce üniversiteye danışın.",
     noKey: "Üniversitenin size gönderdiği bağlantının aynısını açın; bu kontrolün anahtarı o bağlantıda.",
     yourPart: "Sizin adımınız",
-    lockTitle: "Harcı kilitleyin",
+    lockTitle: "Harcı ödeyin",
     lockText:
-      "Para kimseye gitmez, emanet hesabına girer. Ödeme ortağına ancak üniversite liranın geldiğini onayladıktan sonra aktarılır. Son tarihe kadar bu gerçekleşmezse para size geri döner.",
+      "Para kimseye gitmez, emanet hesabına girer. Ancak üniversite liranın geldiğini onayladıktan sonra aktarılır. Talep gerçekleşmezse ödemeniz cüzdanınıza geri döner.",
+    shareText:
+      "Tamamını ya da bir kısmını ödeyebilirsiniz. Kalanı akrabalarınız ya da bir destekçi aynı bağlantıyla tamamlayabilir.",
     connectPay: "Ödemek için cüzdanınızı bağlayın.",
+    amount: "Tutar",
+    amountHint: "En fazla eksik kalan kadar.",
+    badAmount: "Sıfırdan büyük bir tutar girin.",
+    tooMuch: (max, symbol) => `Eksik kalan yalnızca ${max} ${symbol}.`,
     partner: "Ödeme ortağı",
-    partnerHint: "Üniversiteye lira olarak ödeme yapan lisanslı bir şirket.",
-    partnerOption: (n, addr) => `Lisanslı ödeme ortağı ${n} (${addr})`,
     balance: "Bakiyeniz",
     notEnough: (symbol) => `${symbol} bakiyeniz yetersiz.`,
     usdgPre: "Test USDG'yi",
     usdgPost: " adresinden alabilirsiniz.",
     askAdmin: "Test doları için demo yöneticisine başvurun.",
-    locking: "Kilitleniyor…",
-    lock: (amount, symbol) => `${amount} ${symbol} kilitle`,
-    deadlinePassed: "Son tarih geçti",
-    refundTitle: "Son tarih ödeme yapılmadan geçti",
-    refundText:
-      "Ödeme ortağı lirayı gönderdiğini hiç bildirmedi. Tutarın tamamını aile cüzdanına herkes iade edebilir.",
-    refunding: "İade ediliyor…",
-    refund: "Aileye iade et",
-    connectRefund: "İadeyi göndermek için herhangi bir cüzdanı bağlayın.",
+    locking: "Ödeniyor…",
+    lock: (amount, symbol) => `${amount} ${symbol} emanete öde`,
   },
 };
 
@@ -176,7 +165,6 @@ export default function PayPage() {
   // Owned here, not by the action cards: they unmount when the status moves on, and the
   // success notice with its transaction link has to stay on screen.
   const lockTx = useSendTx();
-  const refundTx = useSendTx();
   const lang = useLang();
   const t = T[lang];
 
@@ -216,17 +204,16 @@ export default function PayPage() {
               <StatusBadge status={inv.status} />{" "}
               {(inv.status === Status.Funded || inv.status === Status.Paid) && <Countdown invoice={inv} />}
             </div>
+            <FundingBar inv={inv} />
           </div>
           <VerifyStudent invoice={id} expected={inv.studentRefHash} />
         </article>
 
         <div className="pay-side">
           <Notice tx={lockTx} doneText={t.locked} />
-          <Notice tx={refundTx} doneText={t.refunded} />
-          {inv.status === Status.Open && <LockFunds id={id} inv={inv} tx={lockTx} onDone={() => invoice.mutate()} />}
-          {inv.status === Status.Funded && (
-            <RefundIfExpired id={id} inv={inv} tx={refundTx} onDone={() => invoice.mutate()} />
-          )}
+          {inv.status === Status.Open && <Contribute id={id} inv={inv} tx={lockTx} onDone={() => invoice.mutate()} />}
+          <CloseFailed id={id} inv={inv} onDone={() => invoice.mutate()} />
+          <Contributions id={id} inv={inv} />
           <section className="paper sheet">
             <i className="clip" aria-hidden />
             <p className="label">{t.whereMoney}</p>
@@ -289,36 +276,34 @@ function VerifyStudent({ invoice, expected }: { invoice: Address; expected: Arra
   );
 }
 
-function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx; onDone: () => void }) {
+function Contribute({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx; onDone: () => void }) {
   const client = useApp();
   const me = useWalletAddress();
-  const config = useConfig();
+  const now = useNow();
   const lang = useLang();
   const t = T[lang];
-  const offices = config.data?.offices ?? [];
-  const [office, setOffice] = useState<Address | "">("");
-  const chosen = office || offices[0] || "";
+  const missing = remainingOf(inv);
+  const [text, setText] = useState("");
   const balance = useSWR(me ? ["balance", me, inv.mint, tx.status] : null, () =>
     tokenBalance(client.rpc, me as Address, inv.mint),
   );
   const symbol = mintSymbol(inv.mint);
-  const short = balance.data !== undefined && balance.data < inv.amount;
+  // empty field means "all that is missing"; it follows the target as others contribute
+  const amount = text.trim() ? parseAmount(text) : missing;
+  const invalid = amount === null || amount <= 0n;
+  const over = !invalid && amount > missing;
+  const short = !invalid && balance.data !== undefined && balance.data < amount;
 
-  async function lock() {
-    const sig = await tx.send(async () => {
-      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-      return [
-        await getPayInvoiceInstructionAsync({
-          payer: client.payer,
-          office: chosen as Address,
-          invoice: id,
-          payerToken: await ataOf(me as Address, inv.mint, tokenProgram),
-          mint: inv.mint,
-          tokenProgram,
-        }),
-      ];
-    });
-    if (sig) onDone();
+  // past the collecting deadline, CloseFailed takes over this spot
+  if (!isFundingOpen(inv, now)) return null;
+
+  async function pay() {
+    if (invalid || over) return;
+    const sig = await tx.send(() => contributeIxs(client, id, inv, amount as bigint, false));
+    if (sig) {
+      setText("");
+      onDone();
+    }
   }
 
   return (
@@ -327,19 +312,22 @@ function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx;
       <p className="label">{t.yourPart}</p>
       <h2 className="sheet-title">{t.lockTitle}</h2>
       <p className="sheet-text">{t.lockText}</p>
+      <p className="sheet-text">{t.shareText}</p>
       {!me ? (
         <ConnectPrompt>{t.connectPay}</ConnectPrompt>
       ) : (
         <>
           <div className="fields stacked">
-            <Field label={t.partner} hint={t.partnerHint}>
-              <select value={chosen} onChange={(e) => setOffice(e.target.value as Address)}>
-                {offices.map((o, i) => (
-                  <option key={o} value={o}>
-                    {t.partnerOption(i + 1, shortAddress(o))}
-                  </option>
-                ))}
-              </select>
+            <Field label={`${t.amount} (${symbol})`} hint={t.amountHint}>
+              <input
+                inputMode="decimal"
+                value={text}
+                placeholder={formatAmount(missing, lang)}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </Field>
+            <Field label={t.partner}>
+              <span className="field-value hash">{shortAddress(inv.office)}</span>
             </Field>
             <Field label={t.balance}>
               <span className="field-value">
@@ -347,6 +335,8 @@ function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx;
               </span>
             </Field>
           </div>
+          {text.trim() !== "" && invalid && <p className="notice notice-error">{t.badAmount}</p>}
+          {over && <p className="notice notice-error">{t.tooMuch(formatAmount(missing, lang), symbol)}</p>}
           {short && (
             <p className="notice notice-error">
               {t.notEnough(symbol)}{" "}
@@ -364,59 +354,11 @@ function LockFunds({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx;
             </p>
           )}
           <div className="actions">
-            <button className="btn" onClick={lock} disabled={!chosen || short || tx.status === "pending"}>
-              {tx.status === "pending" ? t.locking : t.lock(formatAmount(inv.amount, lang), symbol)}
+            <button className="btn" onClick={pay} disabled={invalid || over || short || tx.status === "pending"}>
+              {tx.status === "pending" ? t.locking : t.lock(formatAmount(invalid ? 0n : (amount as bigint), lang), symbol)}
             </button>
           </div>
         </>
-      )}
-    </section>
-  );
-}
-
-function RefundIfExpired({ id, inv, tx, onDone }: { id: Address; inv: Invoice; tx: Tx; onDone: () => void }) {
-  const client = useApp();
-  const me = useWalletAddress();
-  const expired = useIsExpired(inv);
-  const t = useT(T);
-  if (!expired) return null;
-
-  async function refund() {
-    const sig = await tx.send(async () => {
-      const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
-      return [
-        await getCreateAssociatedTokenIdempotentInstructionAsync({
-          payer: client.payer,
-          owner: inv.payer,
-          mint: inv.mint,
-          tokenProgram,
-        }),
-        await getRefundInstructionAsync({
-          caller: client.payer,
-          invoice: id,
-          payerToken: await ataOf(inv.payer, inv.mint, tokenProgram),
-          mint: inv.mint,
-          tokenProgram,
-        }),
-      ];
-    });
-    if (sig) onDone();
-  }
-
-  return (
-    <section className="paper sheet tilt-r">
-      <i className="clip" aria-hidden />
-      <p className="label">{t.deadlinePassed}</p>
-      <h2 className="sheet-title">{t.refundTitle}</h2>
-      <p className="sheet-text">{t.refundText}</p>
-      {me ? (
-        <div className="actions">
-          <button className="btn danger" onClick={refund} disabled={tx.status === "pending"}>
-            {tx.status === "pending" ? t.refunding : t.refund}
-          </button>
-        </div>
-      ) : (
-        <ConnectPrompt>{t.connectRefund}</ConnectPrompt>
       )}
     </section>
   );

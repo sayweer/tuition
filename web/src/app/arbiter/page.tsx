@@ -1,24 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import type { Address } from "@solana/kit";
 import useSWR from "swr";
 import { getCreateAssociatedTokenIdempotentInstructionAsync } from "@solana-program/token-2022";
 import { getResolveInstructionAsync } from "@/generated/tuition-escrow";
-import { ConnectPrompt, TxNotice } from "@/components/ui";
-import { REVIEW_SECS, mintSymbol } from "@/lib/constants";
+import { FundingBar } from "@/components/funding";
+import { ConnectPrompt, Field, TxNotice } from "@/components/ui";
+import { allocateIxs } from "@/lib/actions";
+import { MINTS, REVIEW_SECS, mintSymbol } from "@/lib/constants";
 import {
   Status,
   ataOf,
   formatAmount,
   formatTerm,
   formatTry,
+  isFundingOpen,
   listInvoices,
+  parseAmount,
+  remainingOf,
   shortAddress,
   toHex,
   tokenProgramOf,
   type InvoiceRow,
 } from "@/lib/escrow";
-import { useApp, useConfig, useNow, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, useNow, usePayeeName, usePool, useSendTx, useWalletAddress } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Copy = Record<
@@ -38,19 +45,35 @@ type Copy = Record<
   | "receiptHash"
   | "fullRecord"
   | "release"
-  | "returnFamily",
+  | "returnFamily"
+  | "poolTag"
+  | "poolLede"
+  | "notSetUp"
+  | "inPool"
+  | "donated"
+  | "directed"
+  | "returnedToPool"
+  | "waitingTag"
+  | "noWaiting"
+  | "loadingWaiting"
+  | "cover"
+  | "covering"
+  | "covered"
+  | "amount"
+  | "disputesTag",
   string
 > & {
+  coverHint: (max: string, symbol: string) => string;
   notArbiter: (addr: string) => string;
   canStillConfirm: (secs: number) => string;
 };
 
 const T: Dict<Copy> = {
   en: {
-    tag: "Arbiter",
-    title: "Settle the ",
-    titleEm: "disputes.",
-    lede: "These requests are disputed: the payout partner reported sending lira, the university has not confirmed, and the deadline has passed. Check the bank evidence off-chain, then send the escrow to one side. Funds can only go to the partner or back to the family.",
+    tag: "Arbiter · scholarship committee",
+    title: "Fill the gaps, ",
+    titleEm: "settle disputes.",
+    lede: "Two jobs. Direct the scholarship pool to students who are short. Settle disputes: the payout partner reported sending lira, the university has not confirmed, and the deadline has passed. Check the bank evidence off-chain, then pick a side. Funds can only go to the partner or back to the people who gave them.",
     connect: "Connect the arbiter wallet.",
     loading: "Loading…",
     notArbiter: (addr) => `This wallet (${addr}) is not the arbiter.`,
@@ -65,13 +88,30 @@ const T: Dict<Copy> = {
     receiptHash: "Bank receipt hash",
     fullRecord: "Full record",
     release: "Release to partner",
-    returnFamily: "Return to family",
+    returnFamily: "Return to the givers",
+    poolTag: "Scholarship pool",
+    poolLede:
+      "Donors give to the pool without picking a student, and gifts from failed requests can land here too. Direct it to requests that would otherwise fall short.",
+    notSetUp: "The pool for this currency is not set up yet. The admin runs `pnpm admin pool` once.",
+    inPool: "In the pool",
+    donated: "Donated",
+    directed: "Directed to students",
+    returnedToPool: "Came back from failed requests",
+    waitingTag: "Requests still collecting",
+    noWaiting: "No request is collecting right now.",
+    loadingWaiting: "Loading requests…",
+    cover: "Cover from the pool",
+    covering: "Sending…",
+    covered: "Sent from the pool to the request.",
+    amount: "Amount",
+    coverHint: (max, symbol) => `Up to ${max} ${symbol}.`,
+    disputesTag: "Disputes",
   },
   tr: {
-    tag: "Hakem",
-    title: "İtirazları ",
-    titleEm: "karara bağlayın.",
-    lede: "Bu taleplere itiraz var: ödeme ortağı lirayı gönderdiğini bildirdi, üniversite onaylamadı ve son tarih geçti. Banka kanıtlarını zincir dışında inceleyin, ardından emaneti taraflardan birine gönderin. Para yalnızca ödeme ortağına aktarılabilir ya da aileye geri dönebilir.",
+    tag: "Hakem · burs komitesi",
+    title: "Eksikleri kapatın, ",
+    titleEm: "itirazları çözün.",
+    lede: "İki görev. Burs havuzunu eksiği olan öğrencilere yönlendirin. İtirazları karara bağlayın: ödeme ortağı lirayı gönderdiğini bildirdi, üniversite onaylamadı ve son tarih geçti. Banka kanıtlarını zincir dışında inceleyin, ardından bir tarafı seçin. Para yalnızca ödeme ortağına aktarılabilir ya da katkı sahiplerine geri dönebilir.",
     connect: "Hakem cüzdanını bağlayın.",
     loading: "Yükleniyor…",
     notArbiter: (addr) => `Bu cüzdan (${addr}) hakem cüzdanı değil.`,
@@ -86,7 +126,24 @@ const T: Dict<Copy> = {
     receiptHash: "Banka dekontu hash'i",
     fullRecord: "Tüm kayıt",
     release: "Ödeme ortağına aktar",
-    returnFamily: "Aileye iade et",
+    returnFamily: "Katkı sahiplerine iade et",
+    poolTag: "Burs havuzu",
+    poolLede:
+      "Bağışçılar öğrenci seçmeden havuza bağış yapar; gerçekleşmeyen taleplerden gelen bağışlar da buraya düşebilir. Havuzu, aksi hâlde eksik kalacak taleplere yönlendirin.",
+    notSetUp: "Bu para birimi için havuz henüz kurulmadı. Yönetici bir kez `pnpm admin pool` çalıştırır.",
+    inPool: "Havuzda",
+    donated: "Bağışlanan",
+    directed: "Öğrencilere yönlendirilen",
+    returnedToPool: "Gerçekleşmeyen taleplerden dönen",
+    waitingTag: "Hâlâ toplanan talepler",
+    noWaiting: "Şu an toplanan bir talep yok.",
+    loadingWaiting: "Talepler yükleniyor…",
+    cover: "Havuzdan karşıla",
+    covering: "Gönderiliyor…",
+    covered: "Havuzdan talebe gönderildi.",
+    amount: "Tutar",
+    coverHint: (max, symbol) => `En fazla ${max} ${symbol}.`,
+    disputesTag: "İtirazlar",
   },
 };
 
@@ -114,7 +171,11 @@ export default function ArbiterPage() {
       ) : !isArbiter ? (
         <ConnectPrompt>{t.notArbiter(shortAddress(me))}</ConnectPrompt>
       ) : (
-        <Disputes />
+        <>
+          <ScholarshipPool />
+          <h2 className="tag">{t.disputesTag}</h2>
+          <Disputes />
+        </>
       )}
     </main>
   );
@@ -158,20 +219,19 @@ function DisputeRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typ
   const ready = now >= opensAt;
 
   async function rule(toOffice: boolean) {
-    const owner = toOffice ? inv.office : inv.payer;
     const sig = await tx.send(async () => {
       const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
       return [
         await getCreateAssociatedTokenIdempotentInstructionAsync({
           payer: client.payer,
-          owner,
+          owner: inv.office,
           mint: inv.mint,
           tokenProgram,
         }),
         await getResolveInstructionAsync({
           arbiter: client.payer,
           invoice: row.address,
-          destination: await ataOf(owner, inv.mint, tokenProgram),
+          officeToken: await ataOf(inv.office, inv.mint, tokenProgram),
           mint: inv.mint,
           tokenProgram,
           toOffice,
@@ -202,7 +262,7 @@ function DisputeRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typ
         <div>
           <dt className="label">{t.escrow}</dt>
           <dd>
-            {formatAmount(inv.deposited, lang)} {mintSymbol(inv.mint)}
+            {formatAmount(inv.raised, lang)} {mintSymbol(inv.mint)}
           </dd>
         </div>
         <div>
@@ -221,6 +281,137 @@ function DisputeRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typ
           {t.returnFamily}
         </button>
       </div>
+    </article>
+  );
+}
+
+function ScholarshipPool() {
+  const { rpc } = useApp();
+  const now = useNow();
+  const t = useT(T);
+  const open = useSWR("collecting", () => listInvoices(rpc, { status: Status.Open }), { refreshInterval: 5000 });
+  const waiting = (open.data ?? []).filter((r) => isFundingOpen(r.data, now));
+  return (
+    <section className="pool-desk">
+      <h2 className="tag">{t.poolTag}</h2>
+      <p className="page-lede">{t.poolLede}</p>
+      <div className="slips grid">
+        {MINTS.map((m) => (
+          <PoolCard key={m.address} mint={m.address} />
+        ))}
+      </div>
+      <h3 className="tag">{t.waitingTag}</h3>
+      {open.isLoading ? (
+        <p className="desk-muted">{t.loadingWaiting}</p>
+      ) : waiting.length === 0 ? (
+        <p className="desk-muted">{t.noWaiting}</p>
+      ) : (
+        <div className="slips grid">
+          {waiting.map((r) => (
+            <CoverRow key={r.address} row={r} onChange={() => open.mutate()} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PoolCard({ mint }: { mint: Address }) {
+  const pool = usePool(mint);
+  const lang = useLang();
+  const t = T[lang];
+  const symbol = mintSymbol(mint);
+  return (
+    <article className="paper sheet slip compact">
+      <i className="clip" aria-hidden />
+      <p className="label">
+        {t.inPool} · {symbol}
+      </p>
+      {pool.data === null ? (
+        <p className="slip-note">{t.notSetUp}</p>
+      ) : (
+        <>
+          <p className="slip-amount">
+            {pool.data ? formatAmount(pool.data.balance, lang) : "…"}
+            <small>{symbol}</small>
+          </p>
+          {pool.data && (
+            <dl className="slip-facts">
+              <div>
+                <dt className="label">{t.donated}</dt>
+                <dd>{formatAmount(pool.data.data.donated, lang)}</dd>
+              </div>
+              <div>
+                <dt className="label">{t.directed}</dt>
+                <dd>{formatAmount(pool.data.data.allocated, lang)}</dd>
+              </div>
+              <div>
+                <dt className="label">{t.returnedToPool}</dt>
+                <dd>{formatAmount(pool.data.data.returned, lang)}</dd>
+              </div>
+            </dl>
+          )}
+        </>
+      )}
+    </article>
+  );
+}
+
+function CoverRow({ row, onChange }: { row: InvoiceRow; onChange: () => void }) {
+  const client = useApp();
+  const inv = row.data;
+  const school = usePayeeName(inv.payee);
+  const pool = usePool(inv.mint);
+  const tx = useSendTx();
+  const lang = useLang();
+  const t = T[lang];
+  const symbol = mintSymbol(inv.mint);
+  const balance = pool.data?.balance ?? 0n;
+  const missing = remainingOf(inv);
+  const max = missing < balance ? missing : balance;
+  const [text, setText] = useState("");
+  const amount = text.trim() ? parseAmount(text) : max;
+  const valid = amount !== null && amount > 0n && amount <= max;
+
+  async function cover() {
+    const sig = await tx.send(() => allocateIxs(client, row.address, inv, amount as bigint));
+    if (sig) {
+      setText("");
+      onChange();
+      pool.mutate();
+    }
+  }
+
+  return (
+    <article className="paper sheet slip">
+      <i className="clip" aria-hidden />
+      <p className="label">
+        {formatTerm(inv.term, lang)} · {school.data ?? shortAddress(inv.payee)}
+      </p>
+      <FundingBar inv={inv} />
+      {pool.data && max > 0n && (
+        <>
+          <div className="fields stacked">
+            <Field label={`${t.amount} (${symbol})`} hint={t.coverHint(formatAmount(max, lang), symbol)}>
+              <input
+                inputMode="decimal"
+                value={text}
+                placeholder={formatAmount(max, lang)}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="actions">
+            <button className="btn" disabled={!valid || tx.status === "pending"} onClick={cover}>
+              {tx.status === "pending" ? t.covering : t.cover}
+            </button>
+          </div>
+        </>
+      )}
+      {tx.status !== "idle" && <TxNotice tx={tx} doneText={t.covered} />}
+      <p className="slip-meta">
+        <Link href={`/receipt/${row.address}`}>{t.fullRecord}</Link>
+      </p>
     </article>
   );
 }

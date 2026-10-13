@@ -12,26 +12,36 @@ import {
 import { findAssociatedTokenPda, fetchMaybeToken } from "@solana-program/token-2022";
 import {
   CONFIG_DISCRIMINATOR,
+  CONTRIBUTION_DISCRIMINATOR,
   findConfigPda,
   findPayeePda,
+  findPoolPda,
+  findPoolVaultPda,
   getConfigDecoder,
+  getContributionDecoder,
+  getContributionSize,
   getInvoiceDecoder,
   getInvoiceSize,
   getPayeeDecoder,
+  getPoolDecoder,
   INVOICE_DISCRIMINATOR,
   PAYEE_DISCRIMINATOR,
+  POOL_DISCRIMINATOR,
   Status,
   TUITION_ESCROW_PROGRAM_ADDRESS,
+  type Contribution,
   type Invoice,
+  type Pool,
 } from "@/generated/tuition-escrow";
 import { DECIMALS } from "./constants";
 import { locale, type Dict, type Lang } from "./i18n";
 
 type AnyRpc = Rpc<SolanaRpcApi>;
 
-export { Status, type Invoice };
+export { Status, type Contribution, type Invoice, type Pool };
 
 export type InvoiceRow = { address: Address; data: Invoice };
+export type ContributionRow = { address: Address; data: Contribution };
 
 // --------------------------------------------------------------- reads
 
@@ -84,19 +94,11 @@ export async function tokenBalance(rpc: AnyRpc, owner: Address, mint: Address): 
 // ------------------------------------------------------------- listing
 
 // Byte offsets inside an Invoice account (8-byte discriminator first).
-const OFFSET = { payee: 8, payer: 40, office: 72, status: 284 } as const;
+const OFFSET = { payee: 8, office: 40, status: 264 } as const;
 
 type Filter = { payee?: Address; office?: Address; status?: Status };
 
 export async function listInvoices(rpc: AnyRpc, filter: Filter): Promise<InvoiceRow[]> {
-  const b58 = getBase58Decoder();
-  const memcmp = (offset: number, bytes: Uint8Array) => ({
-    memcmp: {
-      offset: BigInt(offset),
-      bytes: b58.decode(bytes) as Base58EncodedBytes,
-      encoding: "base58" as const,
-    },
-  });
   const filters = [
     { dataSize: BigInt(getInvoiceSize()) },
     memcmp(0, new Uint8Array(INVOICE_DISCRIMINATOR)),
@@ -118,17 +120,76 @@ export async function listInvoices(rpc: AnyRpc, filter: Filter): Promise<Invoice
     .sort((a, b) => Number(b.data.createdAt - a.data.createdAt));
 }
 
+/** Every contribution to one request, oldest first. */
+export async function listContributions(rpc: AnyRpc, invoice: Address): Promise<ContributionRow[]> {
+  const filters = [
+    { dataSize: BigInt(getContributionSize()) },
+    memcmp(0, new Uint8Array(CONTRIBUTION_DISCRIMINATOR)),
+    memcmp(8, new Uint8Array(getAddressEncoder().encode(invoice))),
+  ];
+  const accounts = await rpc
+    .getProgramAccounts(TUITION_ESCROW_PROGRAM_ADDRESS, { encoding: "base64", filters })
+    .send();
+  const decoder = getContributionDecoder();
+  const b64 = getBase64Encoder();
+  return accounts
+    .map(({ pubkey, account }) => ({ address: pubkey, data: decoder.decode(b64.encode(account.data[0])) }))
+    .sort((a, b) => Number(a.data.createdAt - b.data.createdAt));
+}
+
+export type PoolInfo = { address: Address; vault: Address; data: Pool; balance: bigint };
+
+/** The scholarship pool for a mint, with what it holds right now. */
+export async function fetchPool(rpc: AnyRpc, mint: Address): Promise<PoolInfo | null> {
+  const [address] = await findPoolPda({ mint });
+  const raw = await ownedData(rpc, address, POOL_DISCRIMINATOR);
+  if (!raw) return null;
+  const [vault] = await findPoolVaultPda({ pool: address });
+  const acc = await fetchMaybeToken(rpc, vault);
+  return { address, vault, data: getPoolDecoder().decode(raw), balance: acc.exists ? acc.data.amount : 0n };
+}
+
+export function remainingOf(inv: Invoice): bigint {
+  return inv.amount > inv.raised ? inv.amount - inv.raised : 0n;
+}
+
+export function isFundingOpen(inv: Invoice, nowSecs: number): boolean {
+  return inv.status === Status.Open && BigInt(nowSecs) < inv.fundingDeadline;
+}
+
+/** A failed request: its contributions can be settled back (to givers or to the pool). */
+export function isSettleable(inv: Invoice): boolean {
+  return (
+    inv.status === Status.Refunded ||
+    inv.status === Status.Expired ||
+    (inv.status === Status.Resolved && !inv.resolvedToOffice)
+  );
+}
+
+const b58 = getBase58Decoder();
+function memcmp(offset: number, bytes: Uint8Array) {
+  return {
+    memcmp: {
+      offset: BigInt(offset),
+      bytes: b58.decode(bytes) as Base58EncodedBytes,
+      encoding: "base58" as const,
+    },
+  };
+}
+
 // ------------------------------------------------------------- history
 
-export type Step = "Created" | "Locked" | "TRY sent" | "Signed" | "Refunded" | "Resolved";
+export type Step = "Created" | "Contributed" | "TRY sent" | "Signed" | "Refunded" | "Resolved" | "Expired";
 
 const STEP_BY_IX: Record<string, Step> = {
   CreateInvoice: "Created",
-  PayInvoice: "Locked",
+  Contribute: "Contributed",
+  Allocate: "Contributed",
   MarkPaid: "TRY sent",
   Acknowledge: "Signed",
   Refund: "Refunded",
   Resolve: "Resolved",
+  Expire: "Expired",
 };
 
 export type HistoryEntry = { step: Step; signature: Signature; blockTime: number | null };
@@ -242,12 +303,12 @@ const PROGRAM_ERRORS: Dict<Record<number, string>> = {
     6000: "Config is invalid.",
     6001: "One wallet cannot be both payout partner, arbiter and university.",
     6002: "Name must be 1 to 64 characters.",
-    6003: "Amount must be more than zero.",
+    6003: "Amount must be more than zero and no more than what is still missing.",
     6004: "Payment window is out of range.",
     6005: "This currency is not accepted.",
     6006: "This token has a transfer hook, which escrow does not support.",
     6007: "This payout partner is not on the approved list.",
-    6008: "The family, payout partner and university must be three different wallets.",
+    6008: "The university and its payout partner cannot contribute to their own request.",
     6009: "This request has already moved on. Refresh the page.",
     6010: "The payout partner reported sending lira. Only the university or the arbiter can settle it now.",
     6011: "Nothing reached escrow.",
@@ -259,20 +320,21 @@ const PROGRAM_ERRORS: Dict<Record<number, string>> = {
     6017: "Only the selected payout partner can do this.",
     6018: "Only the arbiter can do this.",
     6019: "Wrong currency for this request.",
-    6020: "That account does not belong to the party in the ruling.",
+    6020: "That account does not belong to the party the ruling or contribution names.",
     6021: "Math overflow.",
     6022: "Escrow balance does not match the expected payout.",
+    6023: "This contribution has already been sent back.",
   },
   tr: {
     6000: "Yapılandırma geçersiz.",
     6001: "Bir cüzdan hem ödeme ortağı, hem hakem, hem de üniversite olamaz.",
     6002: "Ad 1 ile 64 karakter arasında olmalı.",
-    6003: "Tutar sıfırdan büyük olmalı.",
+    6003: "Tutar sıfırdan büyük ve eksik kalandan fazla olmamalı.",
     6004: "Ödeme süresi izin verilen aralığın dışında.",
     6005: "Bu para birimi kabul edilmiyor.",
     6006: "Bu token'da transfer hook var; emanet hesabı bunu desteklemiyor.",
     6007: "Bu ödeme ortağı onaylı listede değil.",
-    6008: "Aile, ödeme ortağı ve üniversite üç farklı cüzdan olmalı.",
+    6008: "Üniversite ve ödeme ortağı kendi taleplerine katkı yapamaz.",
     6009: "Bu talep bir sonraki aşamaya geçmiş. Sayfayı yenileyin.",
     6010: "Ödeme ortağı lirayı gönderdiğini bildirdi. Artık yalnızca üniversite ya da hakem sonuçlandırabilir.",
     6011: "Emanet hesabına hiçbir şey ulaşmadı.",
@@ -284,9 +346,10 @@ const PROGRAM_ERRORS: Dict<Record<number, string>> = {
     6017: "Bunu yalnızca seçilen ödeme ortağı yapabilir.",
     6018: "Bunu yalnızca hakem yapabilir.",
     6019: "Bu talep için yanlış para birimi.",
-    6020: "Bu hesap, kararda adı geçen tarafa ait değil.",
+    6020: "Bu hesap, kararda ya da katkıda adı geçen tarafa ait değil.",
     6021: "Hesaplama taşması.",
     6022: "Emanet bakiyesi beklenen ödemeyle eşleşmiyor.",
+    6023: "Bu katkı zaten geri gönderildi.",
   },
 };
 

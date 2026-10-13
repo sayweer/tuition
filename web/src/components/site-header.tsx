@@ -13,6 +13,7 @@ const T = {
     how: "How",
     rules: "Rules",
     open: "Open the desk",
+    give: "Give",
     university: "University",
     partner: "Payout partner",
     arbiter: "Arbiter",
@@ -24,6 +25,7 @@ const T = {
     how: "Nasıl",
     rules: "Kurallar",
     open: "Masayı aç",
+    give: "Bağış yap",
     university: "Üniversite",
     partner: "Ödeme ortağı",
     arbiter: "Hakem",
@@ -36,6 +38,7 @@ export function SiteHeader() {
   const t = useT(T);
   const landing = path === "/";
   const roles = [
+    { href: "/give", label: t.give },
     { href: "/school", label: t.university },
     { href: "/office", label: t.partner },
     { href: "/arbiter", label: t.arbiter },
@@ -53,6 +56,7 @@ export function SiteHeader() {
             <a className="hide-sm" href="#but">{t.why}</a>
             <a className="hide-sm" href="#so">{t.how}</a>
             <a className="hide-sm" href="#rules">{t.rules}</a>
+            <Link className="hide-sm" href="/give">{t.give}</Link>
             <Link className="cta" href="/school">{t.open}</Link>
           </>
         ) : (

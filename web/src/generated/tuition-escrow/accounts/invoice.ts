@@ -62,28 +62,29 @@ export function getInvoiceDiscriminatorBytes(): ReadonlyUint8Array {
 export type Invoice = {
   discriminator: ReadonlyUint8Array;
   payee: Address;
-  payer: Address;
   office: Address;
   mint: Address;
   /** Requested amount in mint base units. */
   amount: bigint;
-  /** What actually reached the vault (differs from `amount` only under a transfer fee). */
-  deposited: bigint;
+  /** Sum of all contributions that reached the vault. */
+  raised: bigint;
   /** Informational TRY quote, in kuruş. */
   amountTryKurus: bigint;
   /** Academic term code chosen by the client, e.g. 20261 = 2026 fall. */
   term: number;
-  /** sha256 of the student reference; no personal data on-chain. */
+  /** sha256 of the student reference (salted off-chain); no personal data on-chain. */
   studentRefHash: ReadonlyUint8Array;
   /** sha256 of the office's FAST/EFT receipt. */
   bankReceiptHash: ReadonlyUint8Array;
   nonce: bigint;
   windowSecs: bigint;
   createdAt: bigint;
+  fundingDeadline: bigint;
   fundedAt: bigint;
   deadline: bigint;
   paidAt: bigint;
   settledAt: bigint;
+  contributions: number;
   status: Status;
   resolvedToOffice: boolean;
   bump: number;
@@ -92,28 +93,29 @@ export type Invoice = {
 
 export type InvoiceArgs = {
   payee: Address;
-  payer: Address;
   office: Address;
   mint: Address;
   /** Requested amount in mint base units. */
   amount: number | bigint;
-  /** What actually reached the vault (differs from `amount` only under a transfer fee). */
-  deposited: number | bigint;
+  /** Sum of all contributions that reached the vault. */
+  raised: number | bigint;
   /** Informational TRY quote, in kuruş. */
   amountTryKurus: number | bigint;
   /** Academic term code chosen by the client, e.g. 20261 = 2026 fall. */
   term: number;
-  /** sha256 of the student reference; no personal data on-chain. */
+  /** sha256 of the student reference (salted off-chain); no personal data on-chain. */
   studentRefHash: ReadonlyUint8Array;
   /** sha256 of the office's FAST/EFT receipt. */
   bankReceiptHash: ReadonlyUint8Array;
   nonce: number | bigint;
   windowSecs: number | bigint;
   createdAt: number | bigint;
+  fundingDeadline: number | bigint;
   fundedAt: number | bigint;
   deadline: number | bigint;
   paidAt: number | bigint;
   settledAt: number | bigint;
+  contributions: number;
   status: StatusArgs;
   resolvedToOffice: boolean;
   bump: number;
@@ -126,11 +128,10 @@ export function getInvoiceEncoder(): FixedSizeEncoder<InvoiceArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["payee", getAddressEncoder()],
-      ["payer", getAddressEncoder()],
       ["office", getAddressEncoder()],
       ["mint", getAddressEncoder()],
       ["amount", getU64Encoder()],
-      ["deposited", getU64Encoder()],
+      ["raised", getU64Encoder()],
       ["amountTryKurus", getU64Encoder()],
       ["term", getU32Encoder()],
       ["studentRefHash", fixEncoderSize(getBytesEncoder(), 32)],
@@ -138,10 +139,12 @@ export function getInvoiceEncoder(): FixedSizeEncoder<InvoiceArgs> {
       ["nonce", getU64Encoder()],
       ["windowSecs", getI64Encoder()],
       ["createdAt", getI64Encoder()],
+      ["fundingDeadline", getI64Encoder()],
       ["fundedAt", getI64Encoder()],
       ["deadline", getI64Encoder()],
       ["paidAt", getI64Encoder()],
       ["settledAt", getI64Encoder()],
+      ["contributions", getU32Encoder()],
       ["status", getStatusEncoder()],
       ["resolvedToOffice", getBooleanEncoder()],
       ["bump", getU8Encoder()],
@@ -156,11 +159,10 @@ export function getInvoiceDecoder(): FixedSizeDecoder<Invoice> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["payee", getAddressDecoder()],
-    ["payer", getAddressDecoder()],
     ["office", getAddressDecoder()],
     ["mint", getAddressDecoder()],
     ["amount", getU64Decoder()],
-    ["deposited", getU64Decoder()],
+    ["raised", getU64Decoder()],
     ["amountTryKurus", getU64Decoder()],
     ["term", getU32Decoder()],
     ["studentRefHash", fixDecoderSize(getBytesDecoder(), 32)],
@@ -168,10 +170,12 @@ export function getInvoiceDecoder(): FixedSizeDecoder<Invoice> {
     ["nonce", getU64Decoder()],
     ["windowSecs", getI64Decoder()],
     ["createdAt", getI64Decoder()],
+    ["fundingDeadline", getI64Decoder()],
     ["fundedAt", getI64Decoder()],
     ["deadline", getI64Decoder()],
     ["paidAt", getI64Decoder()],
     ["settledAt", getI64Decoder()],
+    ["contributions", getU32Decoder()],
     ["status", getStatusDecoder()],
     ["resolvedToOffice", getBooleanDecoder()],
     ["bump", getU8Decoder()],
@@ -238,5 +242,5 @@ export async function fetchAllMaybeInvoice(
 }
 
 export function getInvoiceSize(): number {
-  return 288;
+  return 268;
 }

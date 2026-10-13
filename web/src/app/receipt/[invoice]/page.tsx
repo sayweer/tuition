@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { isAddress, type Address } from "@solana/kit";
 import { Stamp } from "@/components/stamp";
+import { Contributions } from "@/components/funding";
 import { AddressLink, DeskNote, StatusBadge, Timeline } from "@/components/ui";
 import { explorerAddress, mintSymbol } from "@/lib/constants";
 import { Status, formatAmount, formatDateTime, formatTerm, formatTry, toHex, type Invoice } from "@/lib/escrow";
@@ -24,7 +25,6 @@ type Copy = Record<
   | "payer"
   | "notPaid"
   | "partner"
-  | "chosenAtPayment"
   | "issued"
   | "locked"
   | "settled"
@@ -46,9 +46,11 @@ type Copy = Record<
   | "stampReturned"
   | "stampRuling"
   | "stampSettled"
-  | "stampToPartner",
+  | "stampToPartner"
+  | "stampUnfunded",
   string
 > & {
+  givers: (n: number) => string;
   paidAs: (lira: string) => string;
   returnedQuote: (lira: string) => string;
   quote: (lira: string) => string;
@@ -69,15 +71,15 @@ const T: Dict<Copy> = {
     receiptNumber: "Receipt number",
     tuition: "tuition",
     paidAs: (lira) => `Paid to the university's bank as ${lira}`,
-    returnedQuote: (lira) => `Returned to the family (lira quote was ${lira})`,
+    returnedQuote: (lira) => `Returned to the givers (lira quote was ${lira})`,
     quote: (lira) => `Lira quote ${lira}`,
     payee: "University (payee)",
-    payer: "Family wallet (payer)",
-    notPaid: "Not paid yet",
+    payer: "Raised from",
+    notPaid: "No contributions yet",
+    givers: (n) => (n === 1 ? "1 contribution" : `${n} contributions`),
     partner: "Payout partner",
-    chosenAtPayment: "Chosen at payment",
     issued: "Issued",
-    locked: "Locked in escrow",
+    locked: "Fully funded",
     settled: "Settled",
     notYet: "Not yet",
     studentRef: "Student reference (salted SHA-256, no personal data on-chain)",
@@ -94,7 +96,8 @@ const T: Dict<Copy> = {
     stampEscrow: "Escrow",
     stampDeadline: "deadline passed",
     stampRefunded: "REFUNDED",
-    stampReturned: "returned to the family",
+    stampReturned: "returned to the givers",
+    stampUnfunded: "NOT FUNDED",
     stampRuling: "arbiter ruling",
     stampSettled: "SETTLED",
     stampToPartner: "released to the partner",
@@ -111,15 +114,15 @@ const T: Dict<Copy> = {
     receiptNumber: "Makbuz numarası",
     tuition: "dönemi harcı",
     paidAs: (lira) => `Üniversitenin bankasına ${lira} olarak ödendi`,
-    returnedQuote: (lira) => `Aileye iade edildi (lira karşılığı ${lira} idi)`,
+    returnedQuote: (lira) => `Katkı sahiplerine iade edildi (lira karşılığı ${lira} idi)`,
     quote: (lira) => `Lira karşılığı ${lira}`,
     payee: "Üniversite (alıcı)",
-    payer: "Aile cüzdanı (ödeyen)",
-    notPaid: "Henüz ödenmedi",
+    payer: "Toplanan katkı",
+    notPaid: "Henüz katkı yok",
+    givers: (n) => `${n} katkı`,
     partner: "Ödeme ortağı",
-    chosenAtPayment: "Ödeme sırasında seçilir",
     issued: "Oluşturuldu",
-    locked: "Emanete kilitlendi",
+    locked: "Tamamı toplandı",
     settled: "Sonuçlandı",
     notYet: "Henüz değil",
     studentRef: "Öğrenci referansı (tuzlanmış SHA-256; zincirde kişisel veri yok)",
@@ -136,7 +139,8 @@ const T: Dict<Copy> = {
     stampEscrow: "EMANET",
     stampDeadline: "SON TARİH GEÇTİ",
     stampRefunded: "İADE EDİLDİ",
-    stampReturned: "AİLEYE GERİ GÖNDERİLDİ",
+    stampReturned: "KATKI SAHİPLERİNE DÖNDÜ",
+    stampUnfunded: "TAMAMLANMADI",
     stampRuling: "HAKEM KARARI",
     stampSettled: "KARARA BAĞLANDI",
     stampToPartner: "ÖDEME ORTAĞINA AKTARILDI",
@@ -154,6 +158,15 @@ function StampFor({ inv, school }: { inv: Invoice; school: string }) {
         <Stamp
           ring={`${t.stampEscrow} ★ ${t.stampDeadline} ★ `}
           center={t.stampRefunded}
+          sub={t.stampReturned}
+          tone="back"
+        />
+      );
+    case Status.Expired:
+      return (
+        <Stamp
+          ring={`${t.stampEscrow} ★ ${t.stampDeadline} ★ `}
+          center={t.stampUnfunded}
           sub={t.stampReturned}
           tone="back"
         />
@@ -197,8 +210,10 @@ export default function ReceiptPage() {
   const symbol = mintSymbol(inv.mint);
   // Only a release (or a ruling for the partner) means the university was paid; a refund is not a receipt.
   const paidToSchool = inv.status === Status.Released || (inv.status === Status.Resolved && inv.resolvedToOffice);
-  const returned = inv.status === Status.Refunded || (inv.status === Status.Resolved && !inv.resolvedToOffice);
-  const unset = (a: string) => a === "11111111111111111111111111111111";
+  const returned =
+    inv.status === Status.Refunded ||
+    inv.status === Status.Expired ||
+    (inv.status === Status.Resolved && !inv.resolvedToOffice);
   const time = (secs: bigint) => (secs > 0n ? formatDateTime(secs, lang) : t.notYet);
 
   return (
@@ -227,7 +242,7 @@ export default function ReceiptPage() {
               {formatTerm(inv.term, lang)} {t.tuition}
             </p>
             <p className="rcpt-amount">
-              {formatAmount(inv.deposited > 0n ? inv.deposited : inv.amount, lang)}
+              {formatAmount(inv.raised > 0n ? inv.raised : inv.amount, lang)}
               <small>{symbol}</small>
             </p>
             <p className="rcpt-try">
@@ -253,11 +268,13 @@ export default function ReceiptPage() {
           </div>
           <div>
             <dt>{t.payer}</dt>
-            <dd>{unset(inv.payer) ? t.notPaid : <AddressLink address={inv.payer} />}</dd>
+            <dd>{inv.contributions === 0 ? t.notPaid : t.givers(inv.contributions)}</dd>
           </div>
           <div>
             <dt>{t.partner}</dt>
-            <dd>{unset(inv.office) ? t.chosenAtPayment : <AddressLink address={inv.office} />}</dd>
+            <dd>
+              <AddressLink address={inv.office} />
+            </dd>
           </div>
           <div>
             <dt>{t.issued}</dt>
@@ -296,6 +313,9 @@ export default function ReceiptPage() {
           {t.footPost}
         </p>
       </article>
+      <div className="no-print rcpt-givers">
+        <Contributions id={id} inv={inv} />
+      </div>
       <div className="desk-actions no-print">
         <button className="btn paperbtn" onClick={() => window.print()}>
           {t.print}

@@ -17,7 +17,6 @@ import {
   SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
   SolanaError,
   type Address,
-  type ClientWithPayer,
   type ClientWithRpc,
   type ClientWithTransactionPlanning,
   type ClientWithTransactionSending,
@@ -36,58 +35,88 @@ import {
 } from "@solana/kit/program-client-core";
 import {
   getConfigCodec,
+  getContributionCodec,
   getInvoiceCodec,
   getPayeeCodec,
+  getPoolCodec,
   type Config,
   type ConfigArgs,
+  type Contribution,
+  type ContributionArgs,
   type Invoice,
   type InvoiceArgs,
   type Payee,
   type PayeeArgs,
+  type Pool,
+  type PoolArgs,
 } from "../accounts";
 import {
   getAcknowledgeInstructionAsync,
+  getAllocateInstructionAsync,
+  getContributeInstructionAsync,
   getCreateInvoiceInstructionAsync,
+  getDonateInstructionAsync,
+  getExpireInstruction,
   getInitConfigInstructionAsync,
+  getInitPoolInstructionAsync,
   getMarkPaidInstruction,
-  getPayInvoiceInstructionAsync,
-  getRefundInstructionAsync,
+  getRefundInstruction,
   getRegisterPayeeInstructionAsync,
   getResolveInstructionAsync,
+  getSettleContributionInstructionAsync,
   getUpdateConfigInstructionAsync,
   parseAcknowledgeInstruction,
+  parseAllocateInstruction,
+  parseContributeInstruction,
   parseCreateInvoiceInstruction,
+  parseDonateInstruction,
+  parseExpireInstruction,
   parseInitConfigInstruction,
+  parseInitPoolInstruction,
   parseMarkPaidInstruction,
-  parsePayInvoiceInstruction,
   parseRefundInstruction,
   parseRegisterPayeeInstruction,
   parseResolveInstruction,
+  parseSettleContributionInstruction,
   parseUpdateConfigInstruction,
   type AcknowledgeAsyncInput,
+  type AllocateAsyncInput,
+  type ContributeAsyncInput,
   type CreateInvoiceAsyncInput,
+  type DonateAsyncInput,
+  type ExpireInput,
   type InitConfigAsyncInput,
+  type InitPoolAsyncInput,
   type MarkPaidInput,
   type ParsedAcknowledgeInstruction,
+  type ParsedAllocateInstruction,
+  type ParsedContributeInstruction,
   type ParsedCreateInvoiceInstruction,
+  type ParsedDonateInstruction,
+  type ParsedExpireInstruction,
   type ParsedInitConfigInstruction,
+  type ParsedInitPoolInstruction,
   type ParsedMarkPaidInstruction,
-  type ParsedPayInvoiceInstruction,
   type ParsedRefundInstruction,
   type ParsedRegisterPayeeInstruction,
   type ParsedResolveInstruction,
+  type ParsedSettleContributionInstruction,
   type ParsedUpdateConfigInstruction,
-  type PayInvoiceAsyncInput,
-  type RefundAsyncInput,
+  type RefundInput,
   type RegisterPayeeAsyncInput,
   type ResolveAsyncInput,
+  type SettleContributionAsyncInput,
   type UpdateConfigAsyncInput,
 } from "../instructions";
 import {
   findConfigPda,
+  findContributeContributionPda,
+  findContributionPda,
   findInvoicePda,
   findPayeePda,
   findPayeeRecordPda,
+  findPoolPda,
+  findPoolVaultPda,
   findVaultPda,
 } from "../pdas";
 
@@ -96,8 +125,10 @@ export const TUITION_ESCROW_PROGRAM_ADDRESS =
 
 export enum TuitionEscrowAccount {
   Config,
+  Contribution,
   Invoice,
   Payee,
+  Pool,
 }
 
 export function identifyTuitionEscrowAccount(
@@ -114,6 +145,17 @@ export function identifyTuitionEscrowAccount(
     )
   ) {
     return TuitionEscrowAccount.Config;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([182, 187, 14, 111, 72, 167, 242, 212]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowAccount.Contribution;
   }
   if (
     containsBytes(
@@ -137,6 +179,17 @@ export function identifyTuitionEscrowAccount(
   ) {
     return TuitionEscrowAccount.Payee;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([241, 154, 109, 4, 17, 177, 109, 188]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowAccount.Pool;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
     { accountData: data, programName: "tuitionEscrow" },
@@ -145,13 +198,18 @@ export function identifyTuitionEscrowAccount(
 
 export enum TuitionEscrowEvent {
   ConfigUpdated,
+  Contributed,
+  ContributionSettled,
   InvoiceCreated,
+  InvoiceExpired,
   InvoiceFunded,
   InvoiceRefunded,
   InvoiceReleased,
   InvoiceResolved,
   PayeeRegistered,
   PayoutMarked,
+  PoolCreated,
+  PoolDonated,
 }
 
 export function identifyTuitionEscrowEvent(
@@ -173,12 +231,45 @@ export function identifyTuitionEscrowEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([196, 199, 157, 136, 180, 222, 100, 118]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowEvent.Contributed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([112, 87, 184, 162, 224, 165, 241, 240]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowEvent.ContributionSettled;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([189, 114, 235, 219, 193, 125, 47, 54]),
       ),
       0,
     )
   ) {
     return TuitionEscrowEvent.InvoiceCreated;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([135, 245, 53, 40, 249, 47, 126, 95]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowEvent.InvoiceExpired;
   }
   if (
     containsBytes(
@@ -246,6 +337,28 @@ export function identifyTuitionEscrowEvent(
   ) {
     return TuitionEscrowEvent.PayoutMarked;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([202, 44, 41, 88, 104, 220, 157, 82]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowEvent.PoolCreated;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([44, 83, 248, 99, 189, 118, 71, 59]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowEvent.PoolDonated;
+  }
   throw new Error(
     "The provided event could not be identified as a tuitionEscrow event.",
   );
@@ -253,13 +366,18 @@ export function identifyTuitionEscrowEvent(
 
 export enum TuitionEscrowInstruction {
   Acknowledge,
+  Allocate,
+  Contribute,
   CreateInvoice,
+  Donate,
+  Expire,
   InitConfig,
+  InitPool,
   MarkPaid,
-  PayInvoice,
   Refund,
   RegisterPayee,
   Resolve,
+  SettleContribution,
   UpdateConfig,
 }
 
@@ -282,12 +400,56 @@ export function identifyTuitionEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([64, 38, 189, 129, 24, 157, 82, 136]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.Allocate;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([82, 33, 68, 131, 32, 0, 205, 95]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.Contribute;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([154, 170, 31, 135, 134, 100, 156, 146]),
       ),
       0,
     )
   ) {
     return TuitionEscrowInstruction.CreateInvoice;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([121, 186, 218, 211, 73, 70, 196, 180]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.Donate;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([243, 83, 205, 58, 57, 201, 247, 146]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.Expire;
   }
   if (
     containsBytes(
@@ -304,23 +466,23 @@ export function identifyTuitionEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([116, 233, 199, 204, 115, 159, 171, 36]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.InitPool;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([51, 120, 9, 160, 70, 29, 18, 205]),
       ),
       0,
     )
   ) {
     return TuitionEscrowInstruction.MarkPaid;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([104, 6, 62, 239, 197, 206, 208, 220]),
-      ),
-      0,
-    )
-  ) {
-    return TuitionEscrowInstruction.PayInvoice;
   }
   if (
     containsBytes(
@@ -359,6 +521,17 @@ export function identifyTuitionEscrowInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([165, 233, 187, 90, 113, 239, 113, 120]),
+      ),
+      0,
+    )
+  ) {
+    return TuitionEscrowInstruction.SettleContribution;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([29, 158, 252, 191, 10, 83, 219, 99]),
       ),
       0,
@@ -379,17 +552,29 @@ export type ParsedTuitionEscrowInstruction<
       instructionType: TuitionEscrowInstruction.Acknowledge;
     } & ParsedAcknowledgeInstruction<TProgram>)
   | ({
+      instructionType: TuitionEscrowInstruction.Allocate;
+    } & ParsedAllocateInstruction<TProgram>)
+  | ({
+      instructionType: TuitionEscrowInstruction.Contribute;
+    } & ParsedContributeInstruction<TProgram>)
+  | ({
       instructionType: TuitionEscrowInstruction.CreateInvoice;
     } & ParsedCreateInvoiceInstruction<TProgram>)
+  | ({
+      instructionType: TuitionEscrowInstruction.Donate;
+    } & ParsedDonateInstruction<TProgram>)
+  | ({
+      instructionType: TuitionEscrowInstruction.Expire;
+    } & ParsedExpireInstruction<TProgram>)
   | ({
       instructionType: TuitionEscrowInstruction.InitConfig;
     } & ParsedInitConfigInstruction<TProgram>)
   | ({
+      instructionType: TuitionEscrowInstruction.InitPool;
+    } & ParsedInitPoolInstruction<TProgram>)
+  | ({
       instructionType: TuitionEscrowInstruction.MarkPaid;
     } & ParsedMarkPaidInstruction<TProgram>)
-  | ({
-      instructionType: TuitionEscrowInstruction.PayInvoice;
-    } & ParsedPayInvoiceInstruction<TProgram>)
   | ({
       instructionType: TuitionEscrowInstruction.Refund;
     } & ParsedRefundInstruction<TProgram>)
@@ -399,6 +584,9 @@ export type ParsedTuitionEscrowInstruction<
   | ({
       instructionType: TuitionEscrowInstruction.Resolve;
     } & ParsedResolveInstruction<TProgram>)
+  | ({
+      instructionType: TuitionEscrowInstruction.SettleContribution;
+    } & ParsedSettleContributionInstruction<TProgram>)
   | ({
       instructionType: TuitionEscrowInstruction.UpdateConfig;
     } & ParsedUpdateConfigInstruction<TProgram>);
@@ -415,11 +603,39 @@ export function parseTuitionEscrowInstruction<TProgram extends string>(
         ...parseAcknowledgeInstruction(instruction),
       };
     }
+    case TuitionEscrowInstruction.Allocate: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.Allocate,
+        ...parseAllocateInstruction(instruction),
+      };
+    }
+    case TuitionEscrowInstruction.Contribute: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.Contribute,
+        ...parseContributeInstruction(instruction),
+      };
+    }
     case TuitionEscrowInstruction.CreateInvoice: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: TuitionEscrowInstruction.CreateInvoice,
         ...parseCreateInvoiceInstruction(instruction),
+      };
+    }
+    case TuitionEscrowInstruction.Donate: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.Donate,
+        ...parseDonateInstruction(instruction),
+      };
+    }
+    case TuitionEscrowInstruction.Expire: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.Expire,
+        ...parseExpireInstruction(instruction),
       };
     }
     case TuitionEscrowInstruction.InitConfig: {
@@ -429,18 +645,18 @@ export function parseTuitionEscrowInstruction<TProgram extends string>(
         ...parseInitConfigInstruction(instruction),
       };
     }
+    case TuitionEscrowInstruction.InitPool: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.InitPool,
+        ...parseInitPoolInstruction(instruction),
+      };
+    }
     case TuitionEscrowInstruction.MarkPaid: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: TuitionEscrowInstruction.MarkPaid,
         ...parseMarkPaidInstruction(instruction),
-      };
-    }
-    case TuitionEscrowInstruction.PayInvoice: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: TuitionEscrowInstruction.PayInvoice,
-        ...parsePayInvoiceInstruction(instruction),
       };
     }
     case TuitionEscrowInstruction.Refund: {
@@ -462,6 +678,13 @@ export function parseTuitionEscrowInstruction<TProgram extends string>(
       return {
         instructionType: TuitionEscrowInstruction.Resolve,
         ...parseResolveInstruction(instruction),
+      };
+    }
+    case TuitionEscrowInstruction.SettleContribution: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TuitionEscrowInstruction.SettleContribution,
+        ...parseSettleContributionInstruction(instruction),
       };
     }
     case TuitionEscrowInstruction.UpdateConfig: {
@@ -494,10 +717,13 @@ export type TuitionEscrowPlugin = {
 export type TuitionEscrowPluginAccounts = {
   config: ReturnType<typeof getConfigCodec> &
     SelfFetchFunctions<ConfigArgs, Config>;
+  contribution: ReturnType<typeof getContributionCodec> &
+    SelfFetchFunctions<ContributionArgs, Contribution>;
   invoice: ReturnType<typeof getInvoiceCodec> &
     SelfFetchFunctions<InvoiceArgs, Invoice>;
   payee: ReturnType<typeof getPayeeCodec> &
     SelfFetchFunctions<PayeeArgs, Payee>;
+  pool: ReturnType<typeof getPoolCodec> & SelfFetchFunctions<PoolArgs, Pool>;
 };
 
 export type TuitionEscrowPluginInstructions = {
@@ -505,24 +731,38 @@ export type TuitionEscrowPluginInstructions = {
     input: AcknowledgeAsyncInput,
   ) => ReturnType<typeof getAcknowledgeInstructionAsync> &
     SelfPlanAndSendFunctions;
+  allocate: (
+    input: AllocateAsyncInput,
+  ) => ReturnType<typeof getAllocateInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  contribute: (
+    input: ContributeAsyncInput,
+  ) => ReturnType<typeof getContributeInstructionAsync> &
+    SelfPlanAndSendFunctions;
   createInvoice: (
     input: CreateInvoiceAsyncInput,
   ) => ReturnType<typeof getCreateInvoiceInstructionAsync> &
     SelfPlanAndSendFunctions;
+  donate: (
+    input: DonateAsyncInput,
+  ) => ReturnType<typeof getDonateInstructionAsync> & SelfPlanAndSendFunctions;
+  expire: (
+    input: ExpireInput,
+  ) => ReturnType<typeof getExpireInstruction> & SelfPlanAndSendFunctions;
   initConfig: (
     input: InitConfigAsyncInput,
   ) => ReturnType<typeof getInitConfigInstructionAsync> &
     SelfPlanAndSendFunctions;
+  initPool: (
+    input: InitPoolAsyncInput,
+  ) => ReturnType<typeof getInitPoolInstructionAsync> &
+    SelfPlanAndSendFunctions;
   markPaid: (
     input: MarkPaidInput,
   ) => ReturnType<typeof getMarkPaidInstruction> & SelfPlanAndSendFunctions;
-  payInvoice: (
-    input: MakeOptional<PayInvoiceAsyncInput, "payer">,
-  ) => ReturnType<typeof getPayInvoiceInstructionAsync> &
-    SelfPlanAndSendFunctions;
   refund: (
-    input: RefundAsyncInput,
-  ) => ReturnType<typeof getRefundInstructionAsync> & SelfPlanAndSendFunctions;
+    input: RefundInput,
+  ) => ReturnType<typeof getRefundInstruction> & SelfPlanAndSendFunctions;
   registerPayee: (
     input: RegisterPayeeAsyncInput,
   ) => ReturnType<typeof getRegisterPayeeInstructionAsync> &
@@ -530,6 +770,10 @@ export type TuitionEscrowPluginInstructions = {
   resolve: (
     input: ResolveAsyncInput,
   ) => ReturnType<typeof getResolveInstructionAsync> & SelfPlanAndSendFunctions;
+  settleContribution: (
+    input: SettleContributionAsyncInput,
+  ) => ReturnType<typeof getSettleContributionInstructionAsync> &
+    SelfPlanAndSendFunctions;
   updateConfig: (
     input: UpdateConfigAsyncInput,
   ) => ReturnType<typeof getUpdateConfigInstructionAsync> &
@@ -538,8 +782,12 @@ export type TuitionEscrowPluginInstructions = {
 
 export type TuitionEscrowPluginPdas = {
   vault: typeof findVaultPda;
-  payeeRecord: typeof findPayeeRecordPda;
   config: typeof findConfigPda;
+  pool: typeof findPoolPda;
+  poolVault: typeof findPoolVaultPda;
+  contribution: typeof findContributionPda;
+  contributeContribution: typeof findContributeContributionPda;
+  payeeRecord: typeof findPayeeRecordPda;
   invoice: typeof findInvoicePda;
   payee: typeof findPayeePda;
 };
@@ -547,7 +795,6 @@ export type TuitionEscrowPluginPdas = {
 export type TuitionEscrowPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
 > &
-  ClientWithPayer &
   ClientWithTransactionPlanning &
   ClientWithTransactionSending;
 
@@ -559,8 +806,10 @@ export function tuitionEscrowProgram() {
       tuitionEscrow: <TuitionEscrowPlugin>{
         accounts: {
           config: addSelfFetchFunctions(client, getConfigCodec()),
+          contribution: addSelfFetchFunctions(client, getContributionCodec()),
           invoice: addSelfFetchFunctions(client, getInvoiceCodec()),
           payee: addSelfFetchFunctions(client, getPayeeCodec()),
+          pool: addSelfFetchFunctions(client, getPoolCodec()),
         },
         instructions: {
           acknowledge: (input) =>
@@ -568,31 +817,42 @@ export function tuitionEscrowProgram() {
               client,
               getAcknowledgeInstructionAsync(input),
             ),
+          allocate: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAllocateInstructionAsync(input),
+            ),
+          contribute: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getContributeInstructionAsync(input),
+            ),
           createInvoice: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCreateInvoiceInstructionAsync(input),
             ),
+          donate: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getDonateInstructionAsync(input),
+            ),
+          expire: (input) =>
+            addSelfPlanAndSendFunctions(client, getExpireInstruction(input)),
           initConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getInitConfigInstructionAsync(input),
             ),
+          initPool: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitPoolInstructionAsync(input),
+            ),
           markPaid: (input) =>
             addSelfPlanAndSendFunctions(client, getMarkPaidInstruction(input)),
-          payInvoice: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getPayInvoiceInstructionAsync({
-                ...input,
-                payer: input.payer ?? client.payer,
-              }),
-            ),
           refund: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getRefundInstructionAsync(input),
-            ),
+            addSelfPlanAndSendFunctions(client, getRefundInstruction(input)),
           registerPayee: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -603,6 +863,11 @@ export function tuitionEscrowProgram() {
               client,
               getResolveInstructionAsync(input),
             ),
+          settleContribution: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSettleContributionInstructionAsync(input),
+            ),
           updateConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -611,8 +876,12 @@ export function tuitionEscrowProgram() {
         },
         pdas: {
           vault: findVaultPda,
-          payeeRecord: findPayeeRecordPda,
           config: findConfigPda,
+          pool: findPoolPda,
+          poolVault: findPoolVaultPda,
+          contribution: findContributionPda,
+          contributeContribution: findContributeContributionPda,
+          payeeRecord: findPayeeRecordPda,
           invoice: findInvoicePda,
           payee: findPayeePda,
         },
@@ -623,5 +892,3 @@ export function tuitionEscrowProgram() {
     });
   };
 }
-
-type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;

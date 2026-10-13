@@ -41,17 +41,13 @@ export function getInvoiceFundedEventDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type InvoiceFundedEvent = {
   invoice: Address;
-  payer: Address;
-  office: Address;
-  deposited: bigint;
+  raised: bigint;
   deadline: bigint;
 };
 
 export type InvoiceFundedEventArgs = {
   invoice: Address;
-  payer: Address;
-  office: Address;
-  deposited: number | bigint;
+  raised: number | bigint;
   deadline: number | bigint;
 };
 
@@ -60,9 +56,7 @@ export function getInvoiceFundedEventEncoder(): FixedSizeEncoder<InvoiceFundedEv
   return getHiddenPrefixEncoder(
     getStructEncoder([
       ["invoice", getAddressEncoder()],
-      ["payer", getAddressEncoder()],
-      ["office", getAddressEncoder()],
-      ["deposited", getU64Encoder()],
+      ["raised", getU64Encoder()],
       ["deadline", getI64Encoder()],
     ]),
     [getConstantEncoder(INVOICE_FUNDED_EVENT_DISCRIMINATOR)],
@@ -74,9 +68,7 @@ export function getInvoiceFundedEventDecoder(): FixedSizeDecoder<InvoiceFundedEv
   return getHiddenPrefixDecoder(
     getStructDecoder([
       ["invoice", getAddressDecoder()],
-      ["payer", getAddressDecoder()],
-      ["office", getAddressDecoder()],
-      ["deposited", getU64Decoder()],
+      ["raised", getU64Decoder()],
       ["deadline", getI64Decoder()],
     ]),
     [getConstantDecoder(INVOICE_FUNDED_EVENT_DISCRIMINATOR)],

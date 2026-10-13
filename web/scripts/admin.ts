@@ -3,6 +3,7 @@
 //   pnpm admin init --arbiter <ADDR> --office <ADDR>
 //   pnpm admin register --school <ADDR> --name "Example University"
 //   pnpm admin mint --to <ADDR> --amount 1000        (mock dollar only)
+//   pnpm admin pool                                   (scholarship pool for every allowed mint)
 // Keypair: $SOLANA_KEYPAIR, else ~/.config/solana/tuition-devnet.json
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -16,6 +17,7 @@ import {
   createSolanaRpcSubscriptions,
   createTransactionMessage,
   devnet,
+  fetchEncodedAccount,
   getSignatureFromTransaction,
   pipe,
   sendAndConfirmTransactionFactory,
@@ -34,6 +36,7 @@ import {
   fetchMaybeConfig,
   findConfigPda,
   getInitConfigInstructionAsync,
+  getInitPoolInstructionAsync,
   getRegisterPayeeInstructionAsync,
 } from "../src/generated/tuition-escrow";
 import { MINTS } from "../src/lib/constants";
@@ -113,6 +116,21 @@ async function main() {
       ]);
       break;
     }
+    case "pool": {
+      const admin = await loadAdmin();
+      for (const m of MINTS) {
+        const owner = await fetchEncodedAccount(rpc, m.address);
+        if (!owner.exists) throw new Error(`mint ${m.symbol} not found`);
+        await send([
+          await getInitPoolInstructionAsync({
+            admin,
+            mint: m.address,
+            tokenProgram: owner.programAddress,
+          }),
+        ]);
+      }
+      break;
+    }
     case "mint": {
       const admin = await loadAdmin();
       const owner = address(need("to"));
@@ -134,7 +152,7 @@ async function main() {
       break;
     }
     default:
-      console.log("usage: pnpm admin <status|init|register|mint> [--flags]");
+      console.log("usage: pnpm admin <status|init|register|pool|mint> [--flags]");
   }
 }
 

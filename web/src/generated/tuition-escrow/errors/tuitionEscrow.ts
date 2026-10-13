@@ -20,7 +20,7 @@ export const TUITION_ESCROW_ERROR__INVALID_CONFIG = 0x1770; // 6000
 export const TUITION_ESCROW_ERROR__ROLE_CONFLICT = 0x1771; // 6001
 /** InvalidName: payee name must be 1..=64 bytes */
 export const TUITION_ESCROW_ERROR__INVALID_NAME = 0x1772; // 6002
-/** InvalidAmount: amount must be greater than zero */
+/** InvalidAmount: amount must be greater than zero and at most what is still missing */
 export const TUITION_ESCROW_ERROR__INVALID_AMOUNT = 0x1773; // 6003
 /** InvalidWindow: window outside allowed range */
 export const TUITION_ESCROW_ERROR__INVALID_WINDOW = 0x1774; // 6004
@@ -30,7 +30,7 @@ export const TUITION_ESCROW_ERROR__MINT_NOT_ALLOWED = 0x1775; // 6005
 export const TUITION_ESCROW_ERROR__TRANSFER_HOOK_NOT_SUPPORTED = 0x1776; // 6006
 /** OfficeNotAllowed: office is not on the allow list */
 export const TUITION_ESCROW_ERROR__OFFICE_NOT_ALLOWED = 0x1777; // 6007
-/** PartiesNotDistinct: payer, office and payee must be distinct */
+/** PartiesNotDistinct: the university and its payout partner cannot contribute to their own request */
 export const TUITION_ESCROW_ERROR__PARTIES_NOT_DISTINCT = 0x1778; // 6008
 /** InvalidStatus: invoice is not in a state that allows this action */
 export const TUITION_ESCROW_ERROR__INVALID_STATUS = 0x1779; // 6009
@@ -54,14 +54,17 @@ export const TUITION_ESCROW_ERROR__NOT_OFFICE = 0x1781; // 6017
 export const TUITION_ESCROW_ERROR__NOT_ARBITER = 0x1782; // 6018
 /** WrongMint: mint mismatch */
 export const TUITION_ESCROW_ERROR__WRONG_MINT = 0x1783; // 6019
-/** WrongDestination: destination does not belong to the party the ruling names */
+/** WrongDestination: destination does not belong to the party the ruling or contribution names */
 export const TUITION_ESCROW_ERROR__WRONG_DESTINATION = 0x1784; // 6020
 /** MathOverflow: math overflow */
 export const TUITION_ESCROW_ERROR__MATH_OVERFLOW = 0x1785; // 6021
 /** ConservationViolated: vault balance does not match the expected payout */
 export const TUITION_ESCROW_ERROR__CONSERVATION_VIOLATED = 0x1786; // 6022
+/** AlreadySettled: this contribution was already settled */
+export const TUITION_ESCROW_ERROR__ALREADY_SETTLED = 0x1787; // 6023
 
 export type TuitionEscrowError =
+  | typeof TUITION_ESCROW_ERROR__ALREADY_SETTLED
   | typeof TUITION_ESCROW_ERROR__CONSERVATION_VIOLATED
   | typeof TUITION_ESCROW_ERROR__EXPIRED
   | typeof TUITION_ESCROW_ERROR__INVALID_AMOUNT
@@ -89,9 +92,10 @@ export type TuitionEscrowError =
 let tuitionEscrowErrorMessages: Record<TuitionEscrowError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   tuitionEscrowErrorMessages = {
+    [TUITION_ESCROW_ERROR__ALREADY_SETTLED]: `this contribution was already settled`,
     [TUITION_ESCROW_ERROR__CONSERVATION_VIOLATED]: `vault balance does not match the expected payout`,
     [TUITION_ESCROW_ERROR__EXPIRED]: `deadline passed`,
-    [TUITION_ESCROW_ERROR__INVALID_AMOUNT]: `amount must be greater than zero`,
+    [TUITION_ESCROW_ERROR__INVALID_AMOUNT]: `amount must be greater than zero and at most what is still missing`,
     [TUITION_ESCROW_ERROR__INVALID_CONFIG]: `config needs 1..=3 mints, 1..=3 offices and a non-default arbiter`,
     [TUITION_ESCROW_ERROR__INVALID_NAME]: `payee name must be 1..=64 bytes`,
     [TUITION_ESCROW_ERROR__INVALID_RECEIPT_HASH]: `bank receipt hash must not be empty`,
@@ -107,10 +111,10 @@ if (process.env["NODE_ENV"] !== "production") {
     [TUITION_ESCROW_ERROR__NOT_PAYEE]: `signer is not the payee`,
     [TUITION_ESCROW_ERROR__OFFICE_NOT_ALLOWED]: `office is not on the allow list`,
     [TUITION_ESCROW_ERROR__PAID_AWAITS_ARBITER]: `office claimed payout; only the payee or the arbiter can settle`,
-    [TUITION_ESCROW_ERROR__PARTIES_NOT_DISTINCT]: `payer, office and payee must be distinct`,
+    [TUITION_ESCROW_ERROR__PARTIES_NOT_DISTINCT]: `the university and its payout partner cannot contribute to their own request`,
     [TUITION_ESCROW_ERROR__ROLE_CONFLICT]: `one key cannot hold two of the roles office, arbiter and payee`,
     [TUITION_ESCROW_ERROR__TRANSFER_HOOK_NOT_SUPPORTED]: `mints with a transfer hook are not supported`,
-    [TUITION_ESCROW_ERROR__WRONG_DESTINATION]: `destination does not belong to the party the ruling names`,
+    [TUITION_ESCROW_ERROR__WRONG_DESTINATION]: `destination does not belong to the party the ruling or contribution names`,
     [TUITION_ESCROW_ERROR__WRONG_MINT]: `mint mismatch`,
   };
 }
