@@ -193,14 +193,13 @@ pub mod tuition_escrow {
             contributor != inv.payee && contributor != inv.office,
             EscrowError::PartiesNotDistinct
         );
+        // The cap applies to what arrives: with a transfer fee the client sends a little more
+        // so that the net lands exactly on what is missing.
         let remaining = inv
             .amount
             .checked_sub(inv.raised)
             .ok_or(EscrowError::MathOverflow)?;
-        require!(
-            amount > 0 && amount <= remaining,
-            EscrowError::InvalidAmount
-        );
+        require!(amount > 0, EscrowError::InvalidAmount);
         ensure_no_transfer_hook(&ctx.accounts.mint.to_account_info())?;
 
         let before = ctx.accounts.vault.amount;
@@ -226,6 +225,7 @@ pub mod tuition_escrow {
             .checked_sub(before)
             .ok_or(EscrowError::MathOverflow)?;
         require!(deposited > 0, EscrowError::NothingDeposited);
+        require!(deposited <= remaining, EscrowError::InvalidAmount);
 
         let funded = record_contribution(
             inv,
@@ -309,10 +309,7 @@ pub mod tuition_escrow {
             .amount
             .checked_sub(inv.raised)
             .ok_or(EscrowError::MathOverflow)?;
-        require!(
-            amount > 0 && amount <= remaining,
-            EscrowError::InvalidAmount
-        );
+        require!(amount > 0, EscrowError::InvalidAmount);
         ensure_no_transfer_hook(&ctx.accounts.mint.to_account_info())?;
 
         let pool_before = ctx.accounts.pool_vault.amount;
@@ -350,6 +347,8 @@ pub mod tuition_escrow {
             .checked_sub(before)
             .ok_or(EscrowError::MathOverflow)?;
         require!(deposited > 0, EscrowError::NothingDeposited);
+        require!(deposited <= remaining, EscrowError::InvalidAmount);
+        // gross: what left the pool vault, so donated - allocated + returned tracks its balance
         let pool = &mut ctx.accounts.pool;
         pool.allocated = pool
             .allocated
@@ -535,6 +534,7 @@ pub mod tuition_escrow {
         }
 
         let vault_amount = ctx.accounts.vault.amount;
+        let destination_before = ctx.accounts.destination.amount;
         let amount = c.amount.min(vault_amount);
         let contributor = c.contributor;
         ctx.accounts.contribution.settled = true; // effects before interactions
@@ -566,10 +566,18 @@ pub mod tuition_escrow {
             EscrowError::ConservationViolated
         );
         if to_pool {
+            // net: a transfer fee lands short of `amount`, and the pool can only spend what arrived
+            ctx.accounts.destination.reload()?;
+            let arrived = ctx
+                .accounts
+                .destination
+                .amount
+                .checked_sub(destination_before)
+                .ok_or(EscrowError::MathOverflow)?;
             let pool = &mut ctx.accounts.pool;
             pool.returned = pool
                 .returned
-                .checked_add(amount)
+                .checked_add(arrived)
                 .ok_or(EscrowError::MathOverflow)?;
         }
 

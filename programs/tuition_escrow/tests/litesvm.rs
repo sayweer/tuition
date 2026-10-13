@@ -1013,9 +1013,18 @@ fn allocation_and_pool_rules() {
     donate(&mut e, Who::Donor, 100_000_000).unwrap();
     let ix = allocate_ix(&e, &key(&e, Who::Stranger), 1, 1_000_000);
     assert_err(run(&mut e, ix, Who::Stranger), "NotArbiter");
-    assert_err(allocate(&mut e, 1, AMOUNT + 1), "InvalidAmount");
+    assert!(allocate(&mut e, 1, AMOUNT + 1).is_err()); // more than the pool holds
     allocate(&mut e, 1, 100_000_000).unwrap();
-    assert!(allocate(&mut e, 2, 1).is_err()); // pool now empty
+    donate(&mut e, Who::Donor, AMOUNT).unwrap();
+    // the cap is what is still missing, not what the pool holds
+    assert_err(
+        allocate(&mut e, 2, AMOUNT - 100_000_000 + 1),
+        "InvalidAmount",
+    );
+    allocate(&mut e, 3, AMOUNT - 100_000_000).unwrap();
+    assert_eq!(invoice_state(&e).status, Status::Funded);
+    donate(&mut e, Who::Donor, 1).unwrap();
+    assert!(allocate(&mut e, 4, 1).is_err()); // request no longer open
                                               // only the admin opens pools, once per allowed mint
     let (other, _) = create_mint(&mut e.svm, &e.admin, MintKind::Classic);
     let (admin, arbiter, office, mint, prog) = (
@@ -1105,6 +1114,62 @@ fn transfer_fee_books_what_actually_reached_the_vault() {
     give(&mut e, Who::Donor, 1, 100_000_000, true).unwrap();
     assert_eq!(invoice_state(&e).raised, 99_000_000);
     assert_eq!(balance(&e.svm, &e.vault), 99_000_000);
+}
+
+/// Smallest amount to send so that `net` arrives under a `bps` fee (Token-2022 rounds the fee up).
+fn gross_for(net: u64, bps: u64) -> u64 {
+    let fee = |g: u64| (g * bps).div_ceil(10_000);
+    let mut g = (net * 10_000).div_ceil(10_000 - bps);
+    while g > 0 && g - 1 - fee(g - 1) >= net {
+        g -= 1;
+    }
+    while g - fee(g) < net {
+        g += 1;
+    }
+    assert_eq!(g - fee(g), net, "net {net} is reachable");
+    g
+}
+
+#[test]
+fn a_fee_mint_request_still_reaches_funded() {
+    // through contributions: the last giver sends just enough gross for the net to close the gap
+    let mut e = setup(MintKind::T22Fee(100));
+    create(&mut e);
+    give(&mut e, Who::Family, 1, 100_000_000, false).unwrap();
+    let missing = AMOUNT - invoice_state(&e).raised;
+    // a gross that overshoots the gap after the fee is refused
+    assert_err(
+        give(&mut e, Who::Donor, 1, gross_for(missing, 100) + 2, true),
+        "InvalidAmount",
+    );
+    give(&mut e, Who::Donor, 2, gross_for(missing, 100), true).unwrap();
+    let inv = invoice_state(&e);
+    assert_eq!(inv.raised, AMOUNT);
+    assert_eq!(inv.status, Status::Funded);
+    assert_eq!(balance(&e.svm, &e.vault), AMOUNT);
+
+    // through the pool, and the pool counters keep matching its vault
+    let mut e = setup(MintKind::T22Fee(100));
+    create(&mut e);
+    donate(&mut e, Who::Donor, 400_000_000).unwrap();
+    allocate(&mut e, 1, gross_for(AMOUNT, 100)).unwrap();
+    assert_eq!(invoice_state(&e).status, Status::Funded);
+    let p: Pool = decode(&e, &e.pool);
+    assert_eq!(
+        p.donated - p.allocated + p.returned,
+        balance(&e.svm, &e.pool_vault)
+    );
+
+    // and when it fails, what lands back in the pool is booked net
+    advance(&mut e.svm, WINDOW);
+    refund(&mut e).unwrap();
+    let pool = e.pool;
+    settle(&mut e, &pool, 1, Dest::Pool).unwrap();
+    let p: Pool = decode(&e, &e.pool);
+    assert_eq!(
+        p.donated - p.allocated + p.returned,
+        balance(&e.svm, &e.pool_vault)
+    );
 }
 
 #[test]
