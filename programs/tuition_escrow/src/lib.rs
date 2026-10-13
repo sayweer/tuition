@@ -965,7 +965,7 @@ pub struct Contribute<'info> {
         bump = invoice.bump,
         has_one = mint @ EscrowError::WrongMint,
     )]
-    pub invoice: Account<'info, Invoice>,
+    pub invoice: Box<Account<'info, Invoice>>,
     #[account(
         mut,
         seeds = [VAULT_SEED, invoice.key().as_ref()],
@@ -974,14 +974,14 @@ pub struct Contribute<'info> {
         token::authority = invoice,
         token::token_program = token_program,
     )]
-    pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         token::mint = mint,
         token::authority = contributor,
         token::token_program = token_program,
     )]
-    pub contributor_token: InterfaceAccount<'info, TokenAccount>,
+    pub contributor_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init,
         payer = contributor,
@@ -989,9 +989,9 @@ pub struct Contribute<'info> {
         seeds = [CONTRIBUTION_SEED, invoice.key().as_ref(), contributor.key().as_ref(), &nonce.to_le_bytes()],
         bump,
     )]
-    pub contribution: Account<'info, Contribution>,
+    pub contribution: Box<Account<'info, Contribution>>,
     #[account(mint::token_program = token_program)]
-    pub mint: InterfaceAccount<'info, Mint>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -1044,7 +1044,7 @@ pub struct Allocate<'info> {
         bump = invoice.bump,
         has_one = mint @ EscrowError::WrongMint,
     )]
-    pub invoice: Account<'info, Invoice>,
+    pub invoice: Box<Account<'info, Invoice>>,
     #[account(
         mut,
         seeds = [VAULT_SEED, invoice.key().as_ref()],
@@ -1053,14 +1053,14 @@ pub struct Allocate<'info> {
         token::authority = invoice,
         token::token_program = token_program,
     )]
-    pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [POOL_SEED, mint.key().as_ref()],
         bump = pool.bump,
         has_one = mint @ EscrowError::WrongMint,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
     #[account(
         mut,
         seeds = [POOL_VAULT_SEED, pool.key().as_ref()],
@@ -1069,7 +1069,7 @@ pub struct Allocate<'info> {
         token::authority = pool,
         token::token_program = token_program,
     )]
-    pub pool_vault: InterfaceAccount<'info, TokenAccount>,
+    pub pool_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init,
         payer = arbiter,
@@ -1077,9 +1077,9 @@ pub struct Allocate<'info> {
         seeds = [CONTRIBUTION_SEED, invoice.key().as_ref(), pool.key().as_ref(), &nonce.to_le_bytes()],
         bump,
     )]
-    pub contribution: Account<'info, Contribution>,
+    pub contribution: Box<Account<'info, Contribution>>,
     #[account(mint::token_program = token_program)]
-    pub mint: InterfaceAccount<'info, Mint>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -1185,7 +1185,7 @@ pub struct SettleContribution<'info> {
         bump = invoice.bump,
         has_one = mint @ EscrowError::WrongMint,
     )]
-    pub invoice: Account<'info, Invoice>,
+    pub invoice: Box<Account<'info, Invoice>>,
     #[account(
         mut,
         seeds = [VAULT_SEED, invoice.key().as_ref()],
@@ -1194,7 +1194,7 @@ pub struct SettleContribution<'info> {
         token::authority = invoice,
         token::token_program = token_program,
     )]
-    pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [
@@ -1206,23 +1206,23 @@ pub struct SettleContribution<'info> {
         bump = contribution.bump,
         has_one = invoice @ EscrowError::WrongDestination,
     )]
-    pub contribution: Account<'info, Contribution>,
+    pub contribution: Box<Account<'info, Contribution>>,
     #[account(
         mut,
         seeds = [POOL_SEED, mint.key().as_ref()],
         bump = pool.bump,
         has_one = mint @ EscrowError::WrongMint,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
     /// The contributor's token account, or the pool vault (checked in the handler).
     #[account(
         mut,
         token::mint = mint,
         token::token_program = token_program,
     )]
-    pub destination: InterfaceAccount<'info, TokenAccount>,
+    pub destination: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mint::token_program = token_program)]
-    pub mint: InterfaceAccount<'info, Mint>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
