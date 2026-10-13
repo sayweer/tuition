@@ -51,8 +51,11 @@ export function useInvoice(invoice: Address | null) {
 
 export function useContributions(invoice: Address | null, refreshKey: unknown) {
   const { rpc } = useApp();
-  return useSWR(invoice ? ["contributions", invoice, String(refreshKey)] : null, () =>
-    listContributions(rpc, invoice as Address),
+  // Settling changes neither raised nor status, so poll too: a row someone else settled must update here.
+  return useSWR(
+    invoice ? ["contributions", invoice, String(refreshKey)] : null,
+    () => listContributions(rpc, invoice as Address),
+    { refreshInterval: REFRESH_MS },
   );
 }
 

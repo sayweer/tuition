@@ -3,6 +3,18 @@ import {
   getAddressEncoder,
   getBase58Decoder,
   getBase64Encoder,
+  SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED,
+  SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
+  SOLANA_ERROR__INSTRUCTION_ERROR__INSUFFICIENT_FUNDS,
+  SOLANA_ERROR__SIGNER__WALLET_ACCOUNT_CANNOT_SIGN_TRANSACTION,
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_FEE,
+  SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_RENT,
+  SOLANA_ERROR__WALLET__ACCOUNT_NOT_AVAILABLE,
+  SOLANA_ERROR__WALLET__NO_SIGNER_CONNECTED,
+  SOLANA_ERROR__WALLET__NOT_CONNECTED,
+  SOLANA_ERROR__WALLET__SIGNER_NOT_AVAILABLE,
   type Address,
   type Base58EncodedBytes,
   type Rpc,
@@ -242,15 +254,21 @@ export function formatDateTime(unixSecs: number | bigint, lang: Lang = "en"): st
   return new Date(Number(unixSecs) * 1000).toLocaleString(lang === "tr" ? "tr-TR" : "en-GB");
 }
 
-/** Parses a decimal string ("300", "300.5", or "300,5" as typed in Turkish) into base units
- *  without float rounding. More decimals than the unit allows is rejected, not truncated. */
-export function parseAmount(input: string, decimals = DECIMALS): bigint | null {
-  const raw = input.trim();
-  const normalised = raw.includes(",") && !raw.includes(".") ? raw.replace(",", ".") : raw;
-  const m = /^(\d+)(?:\.(\d*))?$/.exec(normalised);
+/** Whole part (bare digits or well-formed thousands groups), then an optional decimal part. */
+const AMOUNT_RE: Dict<RegExp> = {
+  en: /^(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d*))?$/,
+  tr: /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d*))?$/,
+};
+
+/** Parses an amount the way `formatAmount` writes it in `lang` into base units, without float
+ *  rounding: EN "1,500.25" (comma groups, dot is decimal), TR "1.500,25" (dot groups, comma is
+ *  decimal). Grouping is optional but must be well formed, so EN "1,5" or TR "12.5" is rejected
+ *  rather than guessed. More decimals than the unit allows is rejected, not truncated. */
+export function parseAmount(input: string, lang: Lang, decimals = DECIMALS): bigint | null {
+  const m = AMOUNT_RE[lang].exec(input.replace(/\s/g, ""));
   if (!m || (m[2] ?? "").length > decimals) return null;
   const frac = (m[2] ?? "").padEnd(decimals, "0");
-  return BigInt(m[1]) * 10n ** BigInt(decimals) + BigInt(frac || "0");
+  return BigInt(m[1].replace(/\D/g, "")) * 10n ** BigInt(decimals) + BigInt(frac || "0");
 }
 
 const SEASONS: Dict<Record<number, string>> = {
@@ -353,38 +371,101 @@ const PROGRAM_ERRORS: Dict<Record<number, string>> = {
   },
 };
 
-const WALLET_ERRORS: Dict<{ cancelled: string; balance: string; slow: string }> = {
+const TX_ERRORS: Dict<{
+  cancelled: string;
+  balance: string;
+  slow: string;
+  noWallet: string;
+  poolMissing: string;
+  generic: string;
+}> = {
   en: {
     cancelled: "You cancelled the request in your wallet.",
     balance: "Not enough balance. Top up devnet SOL or tokens and try again.",
     slow: "The network took too long. Try again.",
+    noWallet: "Connect your wallet and try again.",
+    poolMissing: "The scholarship pool for this currency is not set up yet.",
+    generic: "The transaction did not go through. Try again; details are in the browser console.",
   },
   tr: {
     cancelled: "İsteği cüzdanınızda iptal ettiniz.",
     balance: "Bakiye yetersiz. Devnet SOL ya da token yükleyip tekrar deneyin.",
     slow: "Ağ çok geç yanıt verdi. Tekrar deneyin.",
+    noWallet: "Cüzdanınızı bağlayıp tekrar deneyin.",
+    poolMissing: "Bu para birimi için burs havuzu henüz kurulmadı.",
+    generic: "İşlem gerçekleşmedi. Tekrar deneyin; ayrıntılar tarayıcı konsolunda.",
   },
 };
 
-function findCustomCode(e: unknown, depth = 0): number | null {
-  if (!e || typeof e !== "object" || depth > 8) return null;
-  const obj = e as { context?: Record<string, unknown>; cause?: unknown };
-  const code = obj.context?.code;
-  if (typeof code === "number" && code >= 6000) return code;
-  for (const next of [obj.cause, ...Object.values(obj.context ?? {})]) {
-    const found = findCustomCode(next, depth + 1);
-    if (found !== null) return found;
+/** Thrown before sending when the mint has no scholarship pool; describeError words it per language. */
+export class PoolMissingError extends Error {
+  constructor() {
+    super("The scholarship pool for this currency is not set up yet.");
+    this.name = "PoolMissingError";
+  }
+}
+
+/** EIP-1193 / Phantom "user rejected" and its Wallet Standard counterpart
+ *  (WALLET_STANDARD_ERROR__USER__REQUEST_REJECTED). */
+const USER_REJECTED = [4001, 4001000];
+/** ACCOUNT_NOT_FOUND is what preflight returns for a fee payer with 0 SOL ("no record of a prior credit"). */
+const BALANCE_CODES = [
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_FEE,
+  SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_RENT,
+  SOLANA_ERROR__INSTRUCTION_ERROR__INSUFFICIENT_FUNDS,
+];
+const SLOW_CODES = [SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND];
+const NO_WALLET_CODES = [
+  SOLANA_ERROR__WALLET__NOT_CONNECTED,
+  SOLANA_ERROR__WALLET__NO_SIGNER_CONNECTED,
+  SOLANA_ERROR__WALLET__SIGNER_NOT_AVAILABLE,
+  SOLANA_ERROR__WALLET__ACCOUNT_NOT_AVAILABLE,
+  SOLANA_ERROR__SIGNER__WALLET_ACCOUNT_CANNOT_SIGN_TRANSACTION,
+];
+/** Custom codes below the program's own 6000+: SPL Token InsufficientFunds (also the system
+ *  program's negative-lamports error), and Anchor AccountNotInitialized for a payer with no token account. */
+const BALANCE_CUSTOM = [1, 3012];
+
+type ErrorNode = { message?: unknown; code?: unknown; cause?: unknown; context?: Record<string, unknown> };
+
+/** The error plus everything reachable through `cause` and `context`, outermost first. In production
+ *  builds kit's own message is only "Solana error #N; Decode…", so the wallet's readable text and the
+ *  program's custom code sit further down this chain. */
+function errorChain(e: unknown, depth = 0, out: ErrorNode[] = []): ErrorNode[] {
+  if (!e || typeof e !== "object" || depth > 8) return out;
+  const node = e as ErrorNode;
+  out.push(node);
+  for (const next of [node.cause, ...Object.values(node.context ?? {})]) errorChain(next, depth + 1, out);
+  return out;
+}
+
+function findCustomCode(chain: ErrorNode[]): number | null {
+  for (const { context } of chain) {
+    const code = context?.code;
+    const custom = context?.__code === SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM;
+    if (typeof code === "number" && (custom || code >= 6000)) return code;
   }
   return null;
 }
 
+/** A short message in `lang` for any send failure. Never returns raw kit text; callers log the error itself. */
 export function describeError(e: unknown, lang: Lang = "en"): string {
-  const code = findCustomCode(e);
+  const w = TX_ERRORS[lang];
+  const chain = errorChain(e);
+  const code = findCustomCode(chain);
   if (code !== null && PROGRAM_ERRORS[lang][code]) return PROGRAM_ERRORS[lang][code];
-  const msg = e instanceof Error ? e.message : String(e);
-  const w = WALLET_ERRORS[lang];
-  if (/reject|denied|cancel/i.test(msg)) return w.cancelled;
-  if (/insufficient (funds|lamports)|0x1\b/i.test(msg)) return w.balance;
-  if (/blockhash/i.test(msg)) return w.slow;
-  return msg;
+  if (chain.some((n) => n instanceof PoolMissingError)) return w.poolMissing;
+  const kit = (codes: number[]) => chain.some((n) => codes.includes(n.context?.__code as number));
+  const text = chain
+    .map((n) => n.message)
+    .filter((m): m is string => typeof m === "string" && !m.startsWith("Solana error #"))
+    .join("\n");
+  const rejected = chain.some((n) => USER_REJECTED.includes(n.code as number)) || kit(USER_REJECTED);
+  if (rejected || /reject|denied|cancel/i.test(text)) return w.cancelled;
+  const lowBalance = (code !== null && BALANCE_CUSTOM.includes(code)) || kit(BALANCE_CODES);
+  if (lowBalance || /insufficient (funds|lamports)|0x1\b/i.test(text)) return w.balance;
+  if (kit(SLOW_CODES) || /blockhash|block height exceeded/i.test(text)) return w.slow;
+  if (kit(NO_WALLET_CODES)) return w.noWallet;
+  return w.generic;
 }

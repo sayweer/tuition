@@ -9,7 +9,7 @@ import {
   getSettleContributionInstructionAsync,
 } from "@/generated/tuition-escrow";
 import type { AppClient } from "@/app/providers";
-import { ataOf, fetchPool, tokenProgramOf, type ContributionRow, type Invoice } from "./escrow";
+import { ataOf, fetchPool, PoolMissingError, tokenProgramOf, type ContributionRow, type Invoice } from "./escrow";
 
 /** Contribution PDAs are keyed by (invoice, contributor, nonce); a millisecond clock plus an
  *  index keeps several contributions sent in one batch distinct. */
@@ -87,9 +87,10 @@ export async function settleIxs(
 ): Promise<Instruction[]> {
   const tokenProgram = await tokenProgramOf(client.rpc, inv.mint);
   const c = contribution.data;
+  // settle_contribution takes the mint's pool account on both branches, so without it nothing can settle.
+  const pool = await fetchPool(client.rpc, inv.mint);
+  if (!pool) throw new PoolMissingError();
   if (c.toPoolOnFail) {
-    const pool = await fetchPool(client.rpc, inv.mint);
-    if (!pool) throw new Error("The scholarship pool for this currency is not set up yet.");
     return [
       await getSettleContributionInstructionAsync({
         caller: client.payer,
