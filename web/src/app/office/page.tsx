@@ -12,13 +12,14 @@ import {
   formatAmount,
   formatTerm,
   formatTry,
+  isExpired,
   listInvoices,
   sha256,
   shortAddress,
   toHex,
   type InvoiceRow,
 } from "@/lib/escrow";
-import { useApp, useConfig, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
+import { useApp, useConfig, useNow, usePayeeName, useSendTx, useWalletAddress } from "@/lib/hooks";
 import { useLang, useT, type Dict } from "@/lib/i18n";
 
 type Copy = Record<
@@ -35,6 +36,9 @@ type Copy = Record<
   | "toPay"
   | "nothing"
   | "history"
+  | "collecting"
+  | "missed"
+  | "openRequest"
   | "sendLira"
   | "to"
   | "transferRef"
@@ -55,9 +59,9 @@ const T: Dict<Copy> = {
     tag: "Payout partner",
     title: "Send the lira, ",
     titleEm: "report it.",
-    lede: "Each slip is tuition a family has already locked for you. Send the lira to the university's bank, attach the bank receipt, and report it. You are paid when the university confirms.",
+    lede: "Each slip is tuition already fully funded in escrow for you. Send the lira to the university's bank, attach the bank receipt, and report it. You are paid when the university confirms.",
     beforeDeadline: "Before the deadline",
-    rule: "Report the transfer before the deadline, as soon as you send it. After the deadline an unreported request can be refunded to the family.",
+    rule: "Report the transfer before the deadline, as soon as you send it. After the deadline anyone can cancel an unreported request, and each contribution goes back to its giver or to the scholarship pool.",
     connect: "Connect the payout partner wallet.",
     loading: "Loading…",
     notApproved: (addr) =>
@@ -67,6 +71,9 @@ const T: Dict<Copy> = {
     toPay: "To pay",
     nothing: "Nothing waiting. New locked tuition appears here automatically.",
     history: "History",
+    collecting: "Still collecting",
+    missed: "Deadline passed without a report. Do not send lira: this request will be cancelled and its contributions returned.",
+    openRequest: "Open the request",
     sendLira: "send lira",
     to: "to",
     escrowHolds: (amount, symbol) => `Escrow holds ${amount} ${symbol}.`,
@@ -82,9 +89,9 @@ const T: Dict<Copy> = {
     tag: "Ödeme ortağı",
     title: "Lirayı gönderin, ",
     titleEm: "bildirin.",
-    lede: "Her fiş, bir ailenin sizin için kilitlediği bir harçtır. Lirayı üniversitenin bankasına gönderin, banka dekontunu ekleyin ve bildirin. Üniversite onayladığında ödemenizi alırsınız.",
+    lede: "Her fiş, sizin için emanette tamamı toplanmış bir harçtır. Lirayı üniversitenin bankasına gönderin, banka dekontunu ekleyin ve bildirin. Üniversite onayladığında ödemenizi alırsınız.",
     beforeDeadline: "Son tarihten önce",
-    rule: "Havaleyi gönderir göndermez, son tarihten önce bildirin. Son tarihten sonra, bildirilmemiş bir talep aileye iade edilebilir.",
+    rule: "Havaleyi gönderir göndermez, son tarihten önce bildirin. Son tarihten sonra bildirilmemiş bir talebi herkes iptal edebilir; her katkı sahibine ya da burs havuzuna döner.",
     connect: "Ödeme ortağı cüzdanını bağlayın.",
     loading: "Yükleniyor…",
     notApproved: (addr) =>
@@ -94,6 +101,9 @@ const T: Dict<Copy> = {
     toPay: "Ödenecekler",
     nothing: "Bekleyen bir şey yok. Yeni kilitlenen harçlar burada kendiliğinden görünür.",
     history: "Geçmiş",
+    collecting: "Hâlâ toplanıyor",
+    missed: "Süre bildirim yapılmadan doldu. Lira göndermeyin: bu talep iptal edilecek ve katkılar geri dönecek.",
+    openRequest: "Talebi aç",
     sendLira: "lira gönderilecek",
     to: "Alıcı:",
     escrowHolds: (amount, symbol) => `Emanet hesabında ${amount} ${symbol} var.`,
@@ -147,15 +157,19 @@ function Queue({ me }: { me: Address }) {
   const rows = useSWR(["office-invoices", me], () => listInvoices(rpc, { office: me }), { refreshInterval: 5000 });
   // Owned by the queue: a reported slip leaves "To pay", and its notice must outlive it.
   const tx = useSendTx();
+  const now = useNow();
   const t = useT(T);
   if (rows.isLoading) return <p className="desk-muted">{t.loadingRequests}</p>;
   const all = rows.data ?? [];
-  const todo = all.filter((r) => r.data.status === Status.Funded);
-  const rest = all.filter((r) => r.data.status !== Status.Funded);
+  // A Funded slip past its deadline can no longer be reported, so it leaves "To pay".
+  const todo = all.filter((r) => r.data.status === Status.Funded && !isExpired(r.data, now));
+  const collecting = all.filter((r) => r.data.status === Status.Open);
+  const rest = all.filter((r) => !todo.includes(r) && !collecting.includes(r));
+  const side = collecting.length > 0 || rest.length > 0;
   return (
     <>
     {tx.status !== "idle" && <TxNotice tx={tx} doneText={t.reported} />}
-    <div className={rest.length > 0 ? "queue two" : "queue"}>
+    <div className={side ? "queue two" : "queue"}>
       <section className="col">
         <h2 className="tag">{t.toPay}</h2>
         {todo.length ? (
@@ -168,14 +182,28 @@ function Queue({ me }: { me: Address }) {
           <p className="desk-muted">{t.nothing}</p>
         )}
       </section>
-      {rest.length > 0 && (
+      {side && (
         <section className="col">
-          <h2 className="tag">{t.history}</h2>
-          <div className="slips">
-            {rest.map((r) => (
-              <HistoryRow key={r.address} row={r} />
-            ))}
-          </div>
+          {collecting.length > 0 && (
+            <>
+              <h2 className="tag">{t.collecting}</h2>
+              <div className="slips">
+                {collecting.map((r) => (
+                  <HistoryRow key={r.address} row={r} />
+                ))}
+              </div>
+            </>
+          )}
+          {rest.length > 0 && (
+            <>
+              <h2 className="tag">{t.history}</h2>
+              <div className="slips">
+                {rest.map((r) => (
+                  <HistoryRow key={r.address} row={r} />
+                ))}
+              </div>
+            </>
+          )}
         </section>
       )}
     </div>
@@ -243,6 +271,7 @@ function PayRow({ row, tx, onChange }: { row: InvoiceRow; tx: ReturnType<typeof 
 function HistoryRow({ row }: { row: InvoiceRow }) {
   const inv = row.data;
   const school = usePayeeName(inv.payee);
+  const missed = useIsExpired(inv) && inv.status === Status.Funded;
   const lang = useLang();
   const t = T[lang];
   return (
@@ -256,11 +285,14 @@ function HistoryRow({ row }: { row: InvoiceRow }) {
         {t.to} <b>{school.data ?? shortAddress(inv.payee)}</b>
       </p>
       <div className="status-line">
-        <StatusBadge status={inv.status} /> {inv.status === Status.Paid && <Countdown invoice={inv} />}
+        <StatusBadge status={inv.status} invoice={inv} />{" "}
+        {(inv.status === Status.Paid || missed) && <Countdown invoice={inv} />}
       </div>
+      {missed && <p className="slip-note">{t.missed}</p>}
       <div className="actions">
-        <Link className="btn ghost" href={`/receipt/${row.address}`}>
-          {t.receipt} <span className="arr" aria-hidden>→</span>
+        {/* The pay page is where the refund crank (CloseFailed) runs. */}
+        <Link className="btn ghost" href={missed ? `/pay/${row.address}` : `/receipt/${row.address}`}>
+          {missed ? t.openRequest : t.receipt} <span className="arr" aria-hidden>→</span>
         </Link>
       </div>
     </article>
