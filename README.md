@@ -2,7 +2,7 @@
 
 **Live app: [tuition-omega.vercel.app](https://tuition-omega.vercel.app)** (Solana devnet)
 
-A family abroad locks a Turkish university's tuition in USDG on Solana. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the student and the university can each check on their own.
+A family abroad locks a Turkish university's tuition in USDG on Solana. Relatives, sponsors and donors can fill the same request in parts, openly or anonymously, and a scholarship pool covers students who fall short. A licensed payout partner pays the university in lira over FAST/EFT. The escrow is released to the partner only when the university signs for the lira with its own key. That signature stays on-chain as a tuition receipt that the family, the donors, the student and the university can each check on their own.
 
 Built for the Colosseum Crypto World's Fair (Superteam Türkiye local track and Arf × Superteam TR university track). Runs on **Solana devnet** with test tokens.
 
@@ -17,18 +17,23 @@ Built for the Colosseum Crypto World's Fair (Superteam Türkiye local track and 
 ```
 University ──create_invoice──▶ ┌──────────────────────────────┐
                                │ Invoice PDA  (the receipt)   │
-Family ──pay_invoice (USDG)──▶ │ Vault PDA    (escrowed USDG) │
-                               └──────────────────────────────┘
+Family, sponsor, donor         │ Vault PDA    (escrowed USDG) │
+   ──contribute (any part)───▶ │ one Contribution PDA each    │
+Scholarship pool ──allocate──▶ └──────────────────────────────┘
+                     raised == amount → Funded, payout deadline starts
 Payout partner ── FAST/EFT in TRY (off-chain) ──▶ university bank
 Payout partner ──mark_paid(sha256 of bank receipt)──▶ Invoice
 University ──acknowledge (own key)──▶ vault → payout partner, status Released
 ```
 
+Every contribution records where it goes if the request fails: back to the giver's wallet, or into the scholarship pool. Families get their money back. Donors usually choose the pool, so a gift that missed one student reaches another.
+
 | Situation | Outcome |
 |---|---|
 | The university confirms receipt (`acknowledge`) | Vault goes to the payout partner. The invoice freezes as `Released`: this is the receipt. |
-| The deadline passes and the partner never claimed payout | **Anyone** can call `refund`. The full amount goes back to the family. |
-| The partner claimed payout (`mark_paid`) but the university never confirmed | Funds freeze. After the deadline, and at least `MIN_WINDOW_SECS` after the claim, the arbiter sends them to the partner or back to the family. **There is no default payout to the partner.** |
+| The collecting period ends before the full amount is raised | **Anyone** can call `expire`, then `settle_contribution` for each gift: it goes back to its giver or into the pool, as chosen. |
+| The payout deadline passes and the partner never claimed payout | **Anyone** can call `refund`, then settle each contribution the same way. |
+| The partner claimed payout (`mark_paid`) but the university never confirmed | Funds freeze. After the deadline, and at least `MIN_WINDOW_SECS` after the claim, the arbiter sends them to the partner or releases the contributions. **There is no default payout to the partner.** |
 
 ### Why Solana
 
@@ -47,7 +52,7 @@ programs/tuition_escrow/   Anchor 1.1.2 program + LiteSVM tests
 idl/                       Anchor IDL (source for the generated client)
 web/                       Next.js 16 app on @solana/kit 8 (Wallet Standard: Phantom, Solflare)
 web/src/generated/         Codama client generated from idl/ (pnpm codama)
-web/scripts/admin.ts       devnet admin tasks (config, university registry, mock mint)
+web/scripts/admin.ts       devnet admin tasks (config, university registry, pools, mock mint)
 ```
 
 ## Devnet addresses
@@ -66,19 +71,25 @@ web/scripts/admin.ts       devnet admin tasks (config, university registry, mock
 | `init_config` | admin (first caller) | Sets the arbiter, allowed mints (≤3) and payout partners (≤3) |
 | `update_config` | admin | Replaces the same fields |
 | `register_payee(name)` | admin | Registers a university finance wallet |
-| `create_invoice(nonce, amount, amount_try_kurus, term, student_ref_hash, window_secs)` | registered university | Opens an invoice and creates an empty vault |
-| `pay_invoice` | family | Locks `amount`, picks a listed partner, starts the deadline |
+| `init_pool` | admin | Creates the scholarship pool and its vault for one allowed mint |
+| `create_invoice(nonce, amount, amount_try_kurus, term, student_ref_hash, window_secs, funding_secs)` | registered university | Opens an invoice with a listed partner and a collecting period, and creates an empty vault |
+| `contribute(nonce, amount, to_pool_on_fail)` | anyone but the university and its partner | Adds up to what is still missing and records a Contribution. Reaching the amount starts the payout deadline. |
+| `donate(amount)` | anyone | An unearmarked gift to the pool |
+| `allocate(nonce, amount)` | arbiter (scholarship committee) | Moves pool money into a request that is still collecting; on failure it returns to the pool |
 | `mark_paid(bank_receipt_hash)` | payout partner | Records the bank receipt hash before the deadline |
 | `acknowledge` | university | Pays the vault to the partner. Allowed whether or not the partner marked paid, and after the deadline. |
-| `refund` | anyone | After the deadline, if the status is still `Funded`: pays the vault back to the family |
-| `resolve(to_office)` | arbiter | `Paid`, deadline passed and review window over: pays to the partner or to the family |
+| `expire` | anyone | After the collecting period, if the status is still `Open`: marks the request `Expired` |
+| `refund` | anyone | After the payout deadline, if the status is still `Funded`: marks the request `Refunded` |
+| `resolve(to_office)` | arbiter | `Paid`, deadline passed and review window over: pays the partner, or releases the contributions |
+| `settle_contribution` | anyone | After a failure: sends one contribution to its giver's account or to the pool vault, once |
 
-**Safety properties, each covered by a LiteSVM test (20 tests):**
+**Safety properties, each covered by a LiteSVM test (19 tests):**
 - Every instruction rejects the wrong signer.
-- Final states (`Released`, `Refunded`, `Resolved`) are terminal: no double payment, no double release.
-- `refund` is rejected before the deadline and once the partner has claimed payout.
-- The vault pays out exactly what it booked: value is conserved, and donations to the vault cannot block a payout or inflate it.
-- Only allowed mints are accepted. The payer, the partner and the university must be three different wallets.
+- Final states (`Released`, `Refunded`, `Resolved`, `Expired`) are terminal: no double payment, no double release.
+- `refund` and `expire` are rejected before their deadlines; `refund` is rejected once the partner has claimed payout.
+- A contribution can exceed neither what is missing nor be settled twice, and it can only go to its giver or to the pool vault.
+- The vault pays out exactly what it booked: value is conserved, and stray transfers into the vault cannot block a payout or inflate it.
+- Only allowed mints are accepted. The university and its partner cannot contribute to their own request.
 - **Token-2022:**
   - classic SPL and Token-2022 both work through `token_interface`;
   - with a transfer fee, the vault books what actually arrived;
@@ -91,7 +102,7 @@ Tested with Anchor 1.1.2, Solana CLI 4.1.1, Rust 1.98 and Node 22+.
 
 ```bash
 anchor build                        # program, IDL, TS types
-cargo test -p tuition_escrow        # 20 LiteSVM tests (needs target/deploy/tuition_escrow.so)
+cargo test -p tuition_escrow        # 19 LiteSVM tests (needs target/deploy/tuition_escrow.so)
 ```
 
 ### Web app
@@ -109,9 +120,10 @@ Optional `NEXT_PUBLIC_SOLANA_RPC_URL` points the app at another devnet RPC. The 
 | Page | For |
 |---|---|
 | `/school` | University desk: issue a request (link + QR), confirm receipt |
-| `/pay/<invoice>` | Family: check the student number, lock funds, refund after the deadline |
+| `/pay/<invoice>` | Family: check the student number, pay all or part, see contributions, send them back after a failure |
+| `/give` | Donors: pick open requests (or paste a tuition link), give part or all, review a summary, pay; or give to the pool |
 | `/office` | Payout partner: queue, hash the bank receipt in the browser, report the lira as sent |
-| `/arbiter` | Arbiter: rule on expired disputes |
+| `/arbiter` | Arbiter and scholarship committee: direct the pool, rule on expired disputes |
 | `/receipt/<invoice>` | Public, printable receipt with an Explorer link for every step |
 
 ### Admin (devnet)
@@ -121,6 +133,7 @@ cd web
 pnpm admin status
 pnpm admin init --arbiter <ARBITER> --office <PARTNER>
 pnpm admin register --school <UNIVERSITY_WALLET> --name "Example University"
+pnpm admin pool                                          # one scholarship pool per allowed mint
 pnpm admin mint --to <FAMILY_WALLET> --amount 1000      # mock dollar
 ```
 
@@ -137,7 +150,9 @@ The script signs with `~/.config/solana/tuition-devnet.json`. Set `SOLANA_KEYPAI
 - **Demo timing.** `MIN_WINDOW_SECS = 20` exists so a demo can show expiry live. A real deployment needs windows of a day or more, and the partner should call `mark_paid` as it sends the lira, not afterwards.
 - **One arbiter key.** A real deployment needs a 2-of-3 panel or a tie-breaker; two arbiters alone can deadlock 1–1. The admin can replace the arbiter and the partner list at any time. The admin role cannot be transferred and a university cannot be revoked.
 - **First caller becomes admin.** `init_config` is first-caller-wins, so deploy and init back to back.
-- **Payer not fixed.** An invoice is not tied to a specific payer wallet. Anyone can fund it first; they pay the tuition with their own money.
+- **Open contributions.** Anyone can contribute to a request with its address. Donors find requests on `/give`; student numbers cannot be searched because they are salted.
+- **Pool trust.** The scholarship committee (the arbiter key) decides where pool money goes. Pool gifts are not refundable to donors.
+- **Settlement is a crank.** After a failure, money moves only when someone calls `settle_contribution`. Anyone can, and the app offers a button for it; the destination is fixed by the contribution itself.
 - **No cancellation.** An unfunded invoice cannot be cancelled, and accounts are never closed: the receipt is kept on purpose.
 - **Issuer risk (USDG).**
   - Paxos holds the permanent delegate, freeze, transfer-fee and transfer-hook authorities on the USDG mint. It can move or freeze tokens in the vault.
